@@ -1,10 +1,9 @@
 [package]
-name = "confirmator"
+name = "dem"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-path = "confirmator.rs"
+path = "lib.rs"
 
 [dependencies]
-typed_floats = "1.0.7"
