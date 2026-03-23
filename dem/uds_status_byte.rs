@@ -8,6 +8,7 @@
 /// |-----|----------|--------------------------------------------------|
 /// |  0  | `tf`     | Confirmed flag (`true` = confirmed/failed)       |
 /// |  1  | `tftoc`  | Latched tf flag — set with tf, never cleared     |
+/// |  2  | `pdtc`.  | Pending DTC                                      |
 /// |  4  | `tncslc` | Not-complete since last clear                    |
 /// |  5  | `tfslc`  | tf since last clear                              |
 /// |  6  | `tnctoc` | Not-complete flag (`true` = not yet complete)    |
@@ -17,6 +18,7 @@ pub struct UdsStatusByte(u8);
 impl UdsStatusByte {
     pub(crate) const TF_BIT:     u8 = 1 << 0; // bit 0
     pub(crate) const TFTOC_BIT:  u8 = 1 << 1; // bit 1
+    pub(crate) const PDTC_BIT:   u8 = 1 << 2; // bit 2
     pub(crate) const TNCSLC_BIT: u8 = 1 << 4; // bit 4
     pub(crate) const TFSLC_BIT:  u8 = 1 << 5; // bit 5
     pub(crate) const TNCTOC_BIT: u8 = 1 << 6; // bit 6
@@ -65,11 +67,46 @@ impl UdsStatusByte {
     /// ```
     pub fn set_tf(&mut self, val: bool) {
         if val {
-            self.0 = (self.0 | (Self::TF_BIT | Self::TFTOC_BIT | Self::TFSLC_BIT)) // sets
+            self.0 = (self.0 | 
+                     (Self::TF_BIT   | Self::TFTOC_BIT |
+                      Self::PDTC_BIT | Self::TFSLC_BIT)) // sets
                 & (!Self::TNCTOC_BIT) ; // clears
 
         } else {
             self.0 &= !Self::TF_BIT;
+            // tftoc and tfslc are not cleared here
+            // tnctoc remains cleared
+        }
+    }
+
+    /// Returns `pdtc` flag (bit 2).
+    ///
+    /// # Example
+    /// ```
+    /// # use dem::UdsStatusByte;
+    /// let mut s = UdsStatusByte::new(1u8);
+    /// s.set_tf(true);
+    /// assert!(s.pdtc());
+    /// ```
+    pub fn pdtc(&self) -> bool {
+        self.0 & Self::PDTC_BIT != 0
+    }
+
+    /// Sets `pdtc`. If `val` is `true`.
+    ///
+    /// # Example
+    /// ```
+    /// # use dem::UdsStatusByte;
+    /// let mut s = UdsStatusByte::new(0);
+    /// s.set_pdtc(true);
+    /// assert!(s.pdtc());
+    /// ```
+    pub fn set_pdtc(&mut self, val: bool) {
+        if val {
+            self.0 |= UdsStatusByte::PDTC_BIT ; // clears
+
+        } else {
+            self.0 &= !Self::PDTC_BIT;
             // tftoc and tfslc are not cleared here
             // tnctoc remains cleared
         }
