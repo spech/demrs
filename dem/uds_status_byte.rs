@@ -277,13 +277,15 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_tf_and_tftoc_latches_permanently() {
+    fn status_flags_set_tf_then_tftoc_and_pdtc_latches_permanently() {
         let mut s = UdsStatusByte::new(0);
         s.set_tf(true);  // tftoc and tfslc latch
         assert!(s.tftoc());
+        assert!(s.pdtc());
         s.set_tf(false); // tf clears, tftoc and tfslc stay
         assert!(!s.tf());
         assert!(s.tftoc());
+        assert!(s.pdtc());
     }
 
     #[test]
