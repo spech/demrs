@@ -143,6 +143,7 @@ impl<'a, 'b> Debouncer<'a, 'b> {
         &mut self,
         condition: Status,
         enable: bool,
+        sampling: f32
     ) -> UdsStatusByte {
 
         self.uds_status_old = *self.nv_config.uds_status;
@@ -160,12 +161,16 @@ impl<'a, 'b> Debouncer<'a, 'b> {
                         if self.debounce_counter < 0i16 {
                             self.reset_counter();
                         }
-                        let increment = div_round(i16::MAX, *self.cal_config.step_up);
+                        let mut increment: i16 = *self.cal_config.step_up;
+                        if *self.cal_config.debounce_type == DebounceType::TimeBased {
+                            increment = div_round(*self.cal_config.step_up, sampling as i16);
+                        }
+                        increment = div_round(i16::MAX, increment);
                         self.debounce_counter = self.debounce_counter.saturating_add(increment);
                         if self.debounce_counter == i16::MAX{
                             self.snap_failed();
                         }
-                    }
+                    } // else error is disabled
                 }
                 Status::PrePassed => {
                     if *self.cal_config.step_down == 1i16 {
@@ -174,7 +179,11 @@ impl<'a, 'b> Debouncer<'a, 'b> {
                         if self.debounce_counter > 0i16 {
                             self.reset_counter();
                         }
-                        let decrement = div_round(i16::MAX, *self.cal_config.step_down);
+                        let mut decrement = *self.cal_config.step_down;
+                        if *self.cal_config.debounce_type == DebounceType::TimeBased {
+                            decrement = div_round(*self.cal_config.step_down, sampling as i16);
+                        }
+                        decrement = div_round(i16::MAX, decrement);
                         self.debounce_counter = self.debounce_counter.saturating_sub(decrement);
                         if self.debounce_counter <= -i16::MAX {
                             self.snap_passed();
@@ -243,7 +252,7 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
         // step_up=Some(2) → increment=i16::MAX; one tick → counter=i16::MAX, not at MAX
-        assert!(!c.step(Status::PreFailed, true).tf());
+        assert!(!c.step(Status::PreFailed, true, 0.0).tf());
         assert_eq!(c.debounce_counter(), div_round(i16::MAX,2));
     }
 
@@ -256,10 +265,10 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &2, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert_eq!(c.debounce_counter(), div_round(i16::MAX,2));
         assert!(!c.status().tf());
-        assert!(c.step(Status::PreFailed, true).tf());
+        assert!(c.step(Status::PreFailed, true, 0.0).tf());
         assert_eq!(c.debounce_counter(), i16::MAX);
     }
 
@@ -269,7 +278,7 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &1, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert_eq!(c.debounce_counter(), i16::MAX);
         assert!(c.status().tf());
     }
@@ -280,12 +289,12 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &2, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PreFailed, true); // counter = i16::MAX
+        c.step(Status::PreFailed, true, 0.0); // counter = i16::MAX
         // Now switch to count=0 → no change
         let c2_cfg = CalibConfig { step_up: &0, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased };
         let mut nv2_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c2: Debouncer<'_, '_> = Debouncer::new(&mut nv2_config, &c2_cfg);
-        c2.step(Status::PreFailed, true);
+        c2.step(Status::PreFailed, true, 0.0);
         assert_eq!(c2.debounce_counter(), 0); // unchanged from 0
     }
 
@@ -298,11 +307,11 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         //c_status.set_tf(true);
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::Failed,true);
-        c.step(Status::PrePassed, true);
+        c.step(Status::Failed,true, 0.0);
+        c.step(Status::PrePassed, true, 0.0);
         assert_eq!(c.debounce_counter(), -div_round(i16::MAX,2));
         assert!(c.status().tf());
-        c.step(Status::PrePassed, true);
+        c.step(Status::PrePassed, true, 0.0);
         assert_eq!(c.debounce_counter(), i16::MIN);
         assert!(!c.status().tf());
     }
@@ -313,11 +322,11 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
         // reach T::MAX with count=1 (snap)
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert!(c.status().tf());
         assert_eq!(c.debounce_counter(), i16::MAX);
         // heal tick count=2 → counter positive so reset to 0 first, then - 64 = i16::MIN, middle zone
-        c.step(Status::PrePassed, true);
+        c.step(Status::PrePassed, true, 0.0);
         assert!(c.status().tf()); // holds true
         assert_eq!(c.debounce_counter(), -div_round(i16::MAX,2));
     }
@@ -329,11 +338,11 @@ mod tests {
         nv_config.uds_status.set_tf(true);
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
         // use Passed to snap instantly to T::MIN → tf = false
-        c.step(Status::Passed, true);
+        c.step(Status::Passed, true, 0.0);
         assert!(!c.status().tf());
         assert_eq!(c.debounce_counter(), i16::MIN);
         // PreFailed count=2 → counter negative so reset to 0 first, then +i16::MAX → i16::MAX, middle zone
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert!(!c.status().tf()); // holds false
         assert_eq!(c.debounce_counter(), div_round(i16::MAX,2));
     }
@@ -343,7 +352,7 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &1, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert!(c.status().tf());
         assert!(c.status().tfslc()); // tfslc set when tf was set
         assert!(!c.status().tnctoc());
@@ -361,9 +370,9 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
         assert!(!c.status().tfslc()); // starts false
-        c.step(Status::PreFailed, true); // tf → true, tfslc latches
+        c.step(Status::PreFailed, true, 0.0); // tf → true, tfslc latches
         assert!(c.status().tfslc());
-        c.step(Status::Passed, true); // tf → false, tfslc stays
+        c.step(Status::Passed, true, 0.0); // tf → false, tfslc stays
         assert!(!c.status().tf());
         assert!(c.status().tfslc()); // still set
         c.clear(); // tfslc reset
@@ -379,7 +388,7 @@ mod tests {
         assert!(c.status().tncslc());
         assert!(c.status().tnctoc());
         // reaching threshold drops tnctoc → tncslc drops too
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert!(!c.status().tnctoc());
         assert!(!c.status().tncslc());
     }
@@ -398,7 +407,7 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
         assert!(c.status().tnctoc());
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert!(!c.status().tnctoc());
     }
 
@@ -408,7 +417,7 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::Passed, true);
+        c.step(Status::Passed, true, 0.0);
         assert!(!c.status().tnctoc());
     }
 
@@ -418,10 +427,10 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PrePassed, true); // snaps to T::MIN
+        c.step(Status::PrePassed, true, 0.0); // snaps to T::MIN
         assert!(!c.status().tnctoc());
         // PreFailed count=2 → resets to 0 (was negative), then +i16::MAX → i16::MAX, middle zone
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert_eq!(c.debounce_counter(), div_round(i16::MAX,2));
         assert!(!c.status().tnctoc()); // stays false
     }
@@ -431,10 +440,10 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &1, step_down: &2, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert!(!c.status().tnctoc());
         // count=2 → counter positive so reset to 0 first, then - 64 = i16::MIN, middle zone
-        c.step(Status::PrePassed, true);
+        c.step(Status::PrePassed, true, 0.0);
         assert_eq!(c.debounce_counter(), -div_round(i16::MAX,2));
         assert!(!c.status().tnctoc()); // stays false
     }
@@ -445,10 +454,10 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
         // count=2 → increment=i16::MAX; two ticks → counter=126
-        c.step(Status::PreFailed, true);
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
+        c.step(Status::PreFailed, true, 0.0);
         assert_eq!(c.debounce_counter(), div_round(i16::MAX,3)*2);
-        c.step(Status::PreFailed, false); // disabled: Freeze
+        c.step(Status::PreFailed, false, 0.0); // disabled: Freeze
         assert_eq!(c.debounce_counter(), div_round(i16::MAX,3)*2); // unchanged
         assert!(!c.status().tf());
     }
@@ -458,9 +467,9 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &2, step_down: &0, debounce_behavior: &DebounceBehavior::Reset , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert_eq!(c.debounce_counter(), div_round(i16::MAX,2));
-        c.step(Status::PreFailed, false); // disabled: Reset
+        c.step(Status::PreFailed, false, 0.0); // disabled: Reset
         assert_eq!(c.debounce_counter(), 0);
         assert!(!c.status().tf());
     }
@@ -470,10 +479,10 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &1, step_down: &2, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PreFailed, true); // tf = true
-        assert!(c.step(Status::PrePassed, false).tf());
+        c.step(Status::PreFailed, true, 0.0); // tf = true
+        assert!(c.step(Status::PrePassed, false, 0.0).tf());
         assert_eq!(c.debounce_counter(), i16::MAX); // holds true
-        assert!(c.step(Status::PrePassed, false).tf()); // holds true
+        assert!(c.step(Status::PrePassed, false, 0.0).tf()); // holds true
     }
 
     #[test]
@@ -481,8 +490,8 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &1, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PreFailed, true);
-        c.step(Status::PreFailed, true); // still saturated
+        c.step(Status::PreFailed, true, 0.0);
+        c.step(Status::PreFailed, true, 0.0); // still saturated
         assert_eq!(c.debounce_counter(), i16::MAX);
     }
 
@@ -492,8 +501,8 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::Passed, true);
-        c.step(Status::Passed, true); // still at T::MIN
+        c.step(Status::Passed, true, 0.0);
+        c.step(Status::Passed, true, 0.0); // still at T::MIN
         assert_eq!(c.debounce_counter(), i16::MIN);
     }
 
@@ -502,7 +511,7 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &0, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::Failed, true);
+        c.step(Status::Failed, true, 0.0);
         assert_eq!(c.debounce_counter(), i16::MAX);
         assert!(c.status().tf());
         assert!(!c.status().tnctoc());
@@ -514,7 +523,7 @@ mod tests {
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::Passed, true);
+        c.step(Status::Passed, true, 0.0);
         assert_eq!(c.debounce_counter(), i16::MIN);
         assert!(!c.status().tf());
         assert!(!c.status().tnctoc());
@@ -525,9 +534,9 @@ mod tests {
         let c_cfg = CalibConfig { step_up: &1, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
-        c.step(Status::PreFailed, true);
+        c.step(Status::PreFailed, true, 0.0);
         assert!(c.status().tf());
-        c.step(Status::Failed, true);
+        c.step(Status::Failed, true, 0.0);
         assert_eq!(c.debounce_counter(), i16::MAX);
         assert!(c.status().tf());
     }
@@ -539,10 +548,10 @@ mod tests {
         nv_config.uds_status.set_tf(true);
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
         // use Passed to reach T::MIN immediately
-        c.step(Status::Passed, true);
+        c.step(Status::Passed, true, 0.0);
         assert!(!c.status().tf());
         // Passed again: counter stays at T::MIN, tf stays false
-        c.step(Status::Passed, true);
+        c.step(Status::Passed, true, 0.0);
         assert_eq!(c.debounce_counter(), i16::MIN);
         assert!(!c.status().tf());
     }
