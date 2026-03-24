@@ -67,10 +67,9 @@ impl UdsStatusByte {
     /// ```
     pub fn set_tf(&mut self, val: bool) {
         if val {
-            self.0 = (self.0 | 
-                     (Self::TF_BIT   | Self::TFTOC_BIT |
-                      Self::PDTC_BIT | Self::TFSLC_BIT)) // sets
-                & (!Self::TNCTOC_BIT) ; // clears
+            self.0 = self.0 | Self::TF_BIT | Self::TFTOC_BIT |
+                      Self::PDTC_BIT | Self::TFSLC_BIT; // sets
+            self.set_tnctoc(false); // clears
 
         } else {
             self.0 &= !Self::TF_BIT;

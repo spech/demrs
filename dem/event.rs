@@ -51,7 +51,7 @@ pub enum DebounceType {
 /// Calibration configuration for [`Debouncer`].
 ///
 /// Holds the step counts and debounce behavior as lifetime references,
-/// allowing a single config to be shared across multiple confirmators.
+/// allowing a single config to be shared across multiple events.
 pub struct CalibConfig<'a> {
     /// Number of `PreFailed` ticks to reach `i16::MAX`.
     /// `0` → counter unchanged, `1` → immediate snap, `n` → gradual.
@@ -84,7 +84,7 @@ pub struct NvmConfig<'a> {
 // Debouncer
 // ─────────────────────────────────────────────
 
-/// A confirmator with two thresholds driven by a [`Status`] signal.
+/// A event with two thresholds driven by a [`Status`] signal.
 ///
 /// - `PreFailed` accumulates toward `i16::MAX` via `saturating_add(step_up)`.
 /// - `PrePassed` accumulates toward `i16::MIN` via `saturating_sub(step_down)`.
@@ -95,6 +95,7 @@ pub struct NvmConfig<'a> {
 pub struct Debouncer<'a, 'b> {
     debounce_counter: i16,
     uds_status_old: UdsStatusByte,
+    disabled: bool,
     nv_config: &'b mut NvmConfig<'b>,
     cal_config: &'a CalibConfig<'a>,
 }
@@ -103,24 +104,35 @@ impl<'a, 'b> Debouncer<'a, 'b> {
     /// Create a new Debouncer.
     ///
     /// # Arguments
-    /// * `status`  - A mutable reference to the `UdsStatusByte` backing the confirmator's flags.
+    /// * `status`  - A mutable reference to the `UdsStatusByte` backing the event's flags.
     /// * `config`  - Calibration config holding step counts and debounce behavior.
     pub fn new(nv_config: &'b mut NvmConfig<'b>, cal_config: &'a  CalibConfig<'a>) -> Self {
         Self {
             debounce_counter: 0i16,
             uds_status_old: *nv_config.uds_status,
+            disabled: false,
             nv_config: nv_config,
             cal_config: cal_config,
         }
     }
 
+    /// allow to turn the `Event` debouncing off or on
+    ///
+    /// # Arguments
+    /// * `turnoff`: when `true`. the `Event` debouncing is disable. if `false` the event debouncing is activated.
+    pub fn disable(&mut self, turnoff: bool) {
+        self.disabled = turnoff;
+    }
+
+    /// Stop the event. generally at shutdown
     pub fn stop(&mut self) {
         if !self.nv_config.uds_status.tftoc() && !self.nv_config.uds_status.tnctoc() {
             self.nv_config.uds_status.set_pdtc(false);
         }
+        self.disabled = true;
     }
 
-    /// Clear the confirmator: resets `debounce_counter` to zero, sets `tf` to `false`,
+    /// Clear the event: resets `debounce_counter` to zero, sets `tf` to `false`,
     /// `tnctoc` to `true`, `tncslc` to `true`, clears `tfslc`; preserves `tftoc`.
     pub fn clear(&mut self) {
         self.reset_counter();
@@ -129,25 +141,27 @@ impl<'a, 'b> Debouncer<'a, 'b> {
         self.uds_status_old = *self.nv_config.uds_status;
     }
 
-    /// Advance the error confirmator.
+    /// Advance the event.
     ///
     /// # Arguments
     /// * `condition` - The condition signal. See [`Status`].
-    /// * `enable`    - When `false`, counting is skipped and previous `tf` is returned.
+    /// * `active`    - When `false`, counting is skipped and previous `uds_status` is returned.
+    /// * `sampling`  - sampling period of the called need of `DebounceType::Timesbased`
     ///
     /// # Returns
-    /// - `true`  once `debounce_counter == i16::MAX (`PreFailed` accumulation).
-    /// - `false` once `debounce_counter == i16::MION` (`PrePassed` accumulation).
-    /// - Previous `tf` in all other cases (middle zone, `Failed`, `Passed`, or disabled).
+    /// - `uds_status`` of the `Event`
     pub fn step(
         &mut self,
         condition: Status,
-        enable: bool,
+        active: bool,
         sampling: f32
     ) -> UdsStatusByte {
 
+        //store old status event before computing new status
         self.uds_status_old = *self.nv_config.uds_status;
-        if !enable {
+
+        // if step is not active or the event is desabled: do not debounce
+        if !active || self.disabled {
             if *self.cal_config.debounce_behavior == DebounceBehavior::Reset {
                 self.reset_counter();
             }
@@ -189,7 +203,7 @@ impl<'a, 'b> Debouncer<'a, 'b> {
                             self.snap_passed();
                         }
                     }
-                }
+                } // else event cannot heal
                 Status::Failed => self.snap_failed(),
                 Status::Passed => self.snap_passed(),
             }
@@ -217,7 +231,6 @@ impl<'a, 'b> Debouncer<'a, 'b> {
     fn snap_failed(&mut self) {
         self.debounce_counter = i16::MAX;
         self.nv_config.uds_status.set_tf(true);
-        self.nv_config.uds_status.set_tnctoc(false);
         if self.uds_status_old.raw() & UdsStatusByte::TF_BIT != UdsStatusByte::TF_BIT  {
             let x = *self.nv_config.occurence_cntr;
             *self.nv_config.occurence_cntr = x.saturating_add(1u8);
@@ -247,7 +260,7 @@ mod tests {
        // ── Debouncer ─────────────────────
 
     #[test]
-    fn error_confirmator_initial_output_respected() {
+    fn event_initial_output_respected() {
         let c_cfg = CalibConfig { step_up: &2, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -257,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_count_2_confirms_in_2_ticks() {
+    fn event_count_2_confirms_in_2_ticks() {
         // i16::MAX = 127, count=2 → increment = i16::MAX per tick
         // tick1: 0 + i16::MAX = i16::MAX  (not confirmed)
         // tick2: i16::MAX + i16::MAX = 126 (not confirmed, 126 < 127)
@@ -273,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_count_1_confirms_in_1_tick() {
+    fn event_count_1_confirms_in_1_tick() {
         // count=1 → increment = 127/1 = 127 → confirms immediately
         let c_cfg = CalibConfig { step_up: &1, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
@@ -284,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_count_0_leaves_counter_unchanged() {
+    fn event_count_0_leaves_counter_unchanged() {
         // First advance with count=2 to get counter to i16::MAX
         let c_cfg = CalibConfig { step_up: &2, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
@@ -299,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_prepassed_count_2_heals_in_ticks() {
+    fn event_prepassed_count_2_heals_in_ticks() {
         // decrement = i16::MIN / 2 = i16::MIN, abs() = 64 per tick toward T::MIN (-128)
         // tick1: 0   - 64 = i16::MIN  (not confirmed)
         // tick2: i16::MIN - 64 = -128 == T::MIN → tf = false
@@ -317,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_holds_true_in_middle() {
+    fn event_holds_true_in_middle() {
         let c_cfg = CalibConfig { step_up: &1, step_down: &2, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -332,7 +345,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_holds_false_in_middle() {
+    fn event_holds_false_in_middle() {
         let c_cfg = CalibConfig { step_up: &2, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
@@ -348,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_clear_resets_state() {
+    fn event_clear_resets_state() {
         let c_cfg = CalibConfig { step_up: &1, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -394,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_not_complete_starts_true() {
+    fn event_not_complete_starts_true() {
         let c_cfg = CalibConfig { step_up: &0, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -402,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_not_complete_false_on_positive_threshold() {
+    fn event_not_complete_false_on_positive_threshold() {
         let c_cfg = CalibConfig { step_up: &1, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -412,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_not_complete_false_on_negative_threshold() {
+    fn event_not_complete_false_on_negative_threshold() {
         let c_cfg = CalibConfig { step_up: &0, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
@@ -422,7 +435,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_not_complete_stays_false_after_negative_threshold() {
+    fn event_not_complete_stays_false_after_negative_threshold() {
         let c_cfg = CalibConfig { step_up: &2, step_down: &1, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
@@ -436,7 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_not_complete_stays_false_after_threshold() {
+    fn event_not_complete_stays_false_after_threshold() {
         let c_cfg = CalibConfig { step_up: &1, step_down: &2, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -449,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_freeze_holds_counter_and_tf() {
+    fn event_freeze_holds_counter_and_tf() {
         let c_cfg = CalibConfig { step_up: &3, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -463,7 +476,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_reset_zeroes_counter_when_disabled() {
+    fn event_reset_zeroes_counter_when_disabled() {
         let c_cfg = CalibConfig { step_up: &2, step_down: &0, debounce_behavior: &DebounceBehavior::Reset , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -475,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_disabled_returns_previous_tf() {
+    fn event_disabled_returns_previous_tf() {
         let c_cfg = CalibConfig { step_up: &1, step_down: &2, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -486,7 +499,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_saturates_at_max() {
+    fn event_saturates_at_max() {
         let c_cfg = CalibConfig { step_up: &1, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -496,7 +509,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_saturates_at_min() {
+    fn event_saturates_at_min() {
         let c_cfg = CalibConfig { step_up: &0, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
@@ -507,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_failed_sets_counter_to_max_and_tf_true() {
+    fn event_failed_sets_counter_to_max_and_tf_true() {
         let c_cfg = CalibConfig { step_up: &0, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -518,7 +531,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_passed_sets_counter_to_min_and_tf_false() {
+    fn event_passed_sets_counter_to_min_and_tf_false() {
         let c_cfg = CalibConfig { step_up: &0, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
@@ -530,7 +543,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_failed_after_prefailed_stays_true() {
+    fn event_failed_after_prefailed_stays_true() {
         let c_cfg = CalibConfig { step_up: &1, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze , debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         let mut c: Debouncer<'_, '_> = Debouncer::new(&mut nv_config, &c_cfg);
@@ -542,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    fn error_confirmator_passed_after_prepassed_stays_false() {
+    fn event_passed_after_prepassed_stays_false() {
         let c_cfg = CalibConfig { step_up: &0, step_down: &0, debounce_behavior: &DebounceBehavior::Freeze, debounce_type: &DebounceType::CounterBased};
         let mut nv_config = NvmConfig { uds_status: &mut UdsStatusByte::new(0), occurence_cntr: &mut 0u8 };
         nv_config.uds_status.set_tf(true);
