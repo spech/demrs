@@ -2,16 +2,37 @@
 // UdsStatusByte
 // ─────────────────────────────────────────────
 
-/// Bitfield backing the `UdsStatusByte` status.
+/// # UDS Status Byte
 ///
-/// | Bit | Name     | Meaning                                          |
-/// |-----|----------|--------------------------------------------------|
-/// |  0  | `tf`     | Confirmed flag (`true` = confirmed/failed)       |
-/// |  1  | `tftoc`  | Latched tf flag — set with tf, never cleared     |
-/// |  2  | `pdtc`.  | Pending DTC                                      |
-/// |  4  | `tncslc` | Not-complete since last clear                    |
-/// |  5  | `tfslc`  | tf since last clear                              |
-/// |  6  | `tnctoc` | Not-complete flag (`true` = not yet complete)    |
+/// This module implements the `UdsStatusByte`, a bitfield representing the status of a diagnostic event
+/// or DTC (Diagnostic Trouble Code) in accordance with UDS (Unified Diagnostic Services) principles.
+/// It tracks confirmation states, latching behavior, and lifecycle flags to manage event debouncing
+/// and reporting in automotive diagnostics.
+///
+/// ## Bitfield Overview
+///
+/// | Bit | Name                              | Meaning                                                                 |
+/// |-----|-----------------------------------|-------------------------------------------------------------------------|
+/// |  0  | Test Failed (tf)                 | Confirmed failure flag (`true` = event confirmed as failed)           |
+/// |  1  | Test Failed This Operating Cycle (tftoc) | Latched failure flag; set with tf, never cleared                 |
+/// |  2  | Pending DTC (pdtc)               | Indicates a pending diagnostic trouble code                           |
+/// |  3  | (Reserved)                        | Unused bit                                                            |
+/// |  4  | Test Not Complete Since Last Clear (tncslc) | Not-complete status since last clear                          |
+/// |  5  | Test Failed Since Last Clear (tfslc) | Failure occurred since last clear                                |
+/// |  6  | Test Not Complete This Operating Cycle (tnctoc) | Not-complete flag (`true` = event not yet confirmed)         |
+/// |  7  | (Reserved)                        | Unused bit                                                            |
+///
+/// ## State Machine
+///
+/// Events start in a "not complete" state (`tnctoc = true`). As debouncing progresses, they may enter
+/// "pre-failed" or "pre-passed" states. Once a threshold is reached, the event becomes "confirmed"
+/// (`tf` set), and `tnctoc` is cleared. Latched flags like `tftoc` preserve history across cycles.
+///
+/// ## Design Notes
+///
+/// - Latched flags (e.g., `tftoc`, `tfslc`) are never cleared to maintain diagnostic history.
+/// - `tnctoc` starts `true` and is cleared once an event reaches a confirmation threshold.
+/// - See [`super::Event`] for how these flags are updated during event processing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UdsStatusByte(u8);
 
@@ -24,10 +45,13 @@ impl UdsStatusByte {
     pub(crate) const TNCTOC_BIT: u8 = 1 << 6; // bit 6
 
     /// Creates a `UdsStatusByte` from a raw bitmask.
-    /// `tf` (bit 0) is always forced to `false`, `tnctoc` (bit 6) is always forced to `true`.
+    ///
+    /// Initializes the status byte with the provided `mask`, but forces `tf` (bit 0) and `tftoc` (bit 1)
+    /// to `false` (starting unconfirmed), and `tnctoc` (bit 6) to `true` (not yet complete).
     /// All other bits are taken from `mask`.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let s = UdsStatusByte::new(255u8);
@@ -38,9 +62,10 @@ impl UdsStatusByte {
         UdsStatusByte((mask & !(Self::TF_BIT | Self::TFTOC_BIT)) | Self::TNCTOC_BIT)
     }
 
-    /// Returns `tf` flag (bit 0).
+    /// Returns the `tf` flag (bit 0) — confirmed failure state.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(1u8);
@@ -52,10 +77,16 @@ impl UdsStatusByte {
         self.0 & Self::TF_BIT != 0
     }
 
-    /// Sets `tf`. If `val` is `true`, also sets `tftoc` and sets `tfslc`.
-    /// Clears `tnctoc`
+    /// Sets the `tf` flag (bit 0).
+    ///
+    /// ## Side Effects
+    ///
+    /// If `val` is `true`, also sets `tftoc`, `pdtc`, and `tfslc` to latch the failure state,
+    /// and clears `tnctoc` (event is now complete). If `val` is `false`, only `tf` is cleared;
+    /// latched flags remain set.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -63,7 +94,7 @@ impl UdsStatusByte {
     /// assert!(s.tf());
     /// assert!(s.tftoc()); // latched
     /// assert!(s.tfslc()); // set
-    /// assert!(!s.tnctoc());
+    /// assert!(!s.tnctoc()); // cleared
     /// ```
     pub fn set_tf(&mut self, val: bool) {
         if val {
@@ -78,9 +109,10 @@ impl UdsStatusByte {
         }
     }
 
-    /// Returns `pdtc` flag (bit 2).
+    /// Returns the `pdtc` flag (bit 2) — pending DTC indicator.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(1u8);
@@ -91,9 +123,10 @@ impl UdsStatusByte {
         self.0 & Self::PDTC_BIT != 0
     }
 
-    /// Sets `pdtc`. If `val` is `true`.
+    /// Sets the `pdtc` flag (bit 2).
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -102,18 +135,18 @@ impl UdsStatusByte {
     /// ```
     pub fn set_pdtc(&mut self, val: bool) {
         if val {
-            self.0 |= UdsStatusByte::PDTC_BIT ; // clears
-
+            self.0 |= Self::PDTC_BIT; // sets
         } else {
             self.0 &= !Self::PDTC_BIT;
-            // tftoc and tfslc are not cleared here
-            // tnctoc remains cleared
         }
     }
 
-    /// `tftoc` mirrors `tf` but latches — once `true`, never cleared.
+    /// Returns the `tftoc` flag (bit 1) — latched failure flag.
+    ///
+    /// Mirrors `tf` but latches permanently once set to `true`.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -124,9 +157,12 @@ impl UdsStatusByte {
         self.0 & Self::TFTOC_BIT != 0
     }
 
-    /// Sets `tftoc`. Once `true`, clearing is a no-op by design.
+    /// Sets the `tftoc` flag (bit 1).
+    ///
+    /// Once `true`, clearing is a no-op by design to preserve failure history.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -138,9 +174,10 @@ impl UdsStatusByte {
         // never cleared
     }
 
-    /// Returns `tncslc` flag (bit 4) — not-complete since last clear.
+    /// Returns the `tncslc` flag (bit 4) — not-complete since last clear.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -152,9 +189,12 @@ impl UdsStatusByte {
         self.0 & Self::TNCSLC_BIT != 0
     }
 
-    /// Sets `tncslc` (bit 4). Also cleared automatically when `tnctoc` is cleared.
+    /// Sets the `tncslc` flag (bit 4).
+    ///
+    /// Also cleared automatically when `tnctoc` is cleared.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -166,9 +206,10 @@ impl UdsStatusByte {
         else   { self.0 &= !Self::TNCSLC_BIT; }
     }
 
-    /// Returns `tfslc` flag (bit 5) — tf since last clear.
+    /// Returns the `tfslc` flag (bit 5) — failure since last clear.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -180,9 +221,10 @@ impl UdsStatusByte {
         self.0 & Self::TFSLC_BIT != 0
     }
 
-    /// Sets `tfslc` (bit 5).
+    /// Sets the `tfslc` flag (bit 5).
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -196,9 +238,12 @@ impl UdsStatusByte {
         else   { self.0 &= !Self::TFSLC_BIT; }
     }
 
-    /// Returns `tnctoc` flag (bit 6) — not-complete flag, starts `true`.
+    /// Returns the `tnctoc` flag (bit 6) — not-complete this operating cycle.
+    ///
+    /// Starts `true` on initialization, indicating the event is not yet confirmed.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let s = UdsStatusByte::new(0);
@@ -208,9 +253,12 @@ impl UdsStatusByte {
         self.0 & Self::TNCTOC_BIT != 0
     }
 
-    /// Sets `tnctoc` (bit 6). Clearing also clears `tncslc` (bit 4).
+    /// Sets the `tnctoc` flag (bit 6).
+    ///
+    /// Clearing also clears `tncslc` (bit 4), as completion resets the "since last clear" state.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -226,14 +274,18 @@ impl UdsStatusByte {
         }
     }
 
-    /// Raw underlying byte.
+    /// Returns the raw underlying byte value.
     pub fn raw(&self) -> u8 {
         self.0
     }
 
-    /// Clears all bits and sets `tnctoc`
+    /// Clears all bits except `tnctoc` and `tncslc`, resetting to initial state.
+    ///
+    /// Specifically sets `tnctoc` and `tncslc` to `true`, and clears all others.
+    /// This represents a "last clear" event, resetting history flags.
     ///
     /// # Example
+    ///
     /// ```
     /// # use dem::UdsStatusByte;
     /// let mut s = UdsStatusByte::new(0);
@@ -241,6 +293,7 @@ impl UdsStatusByte {
     /// assert!(!s.tnctoc());
     /// s.clear();
     /// assert!(s.tnctoc());
+    /// assert!(s.tncslc());
     /// ```
     pub fn clear(&mut self) {
         self.0 = 0b0101_0000;
