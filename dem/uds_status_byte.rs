@@ -16,7 +16,7 @@
 /// |  0  | Test Failed (tf)                 | Confirmed failure flag (`true` = event confirmed as failed)           |
 /// |  1  | Test Failed This Operating Cycle (tftoc) | Latched failure flag; set with tf, never cleared                 |
 /// |  2  | Pending DTC (pdtc)               | Indicates a pending diagnostic trouble code                           |
-/// |  3  | (Reserved)                        | Unused bit                                                            |
+/// |  3  | Confirmed DTC (cdtc)             | Indicates a confirmed diagnostic trouble code                        |
 /// |  4  | Test Not Complete Since Last Clear (tncslc) | Not-complete status since last clear                          |
 /// |  5  | Test Failed Since Last Clear (tfslc) | Failure occurred since last clear                                |
 /// |  6  | Test Not Complete This Operating Cycle (tnctoc) | Not-complete flag (`true` = event not yet confirmed)         |
@@ -40,6 +40,7 @@ impl UdsStatusByte {
     pub(crate) const TF_BIT:     u8 = 1 << 0; // bit 0
     pub(crate) const TFTOC_BIT:  u8 = 1 << 1; // bit 1
     pub(crate) const PDTC_BIT:   u8 = 1 << 2; // bit 2
+    pub(crate) const CDTC_BIT:   u8 = 1 << 3; // bit 3
     pub(crate) const TNCSLC_BIT: u8 = 1 << 4; // bit 4
     pub(crate) const TFSLC_BIT:  u8 = 1 << 5; // bit 5
     pub(crate) const TNCTOC_BIT: u8 = 1 << 6; // bit 6
@@ -138,6 +139,39 @@ impl UdsStatusByte {
             self.0 |= Self::PDTC_BIT; // sets
         } else {
             self.0 &= !Self::PDTC_BIT;
+        }
+    }
+
+    /// Returns the `cdtc` flag (bit 3) — confirmed DTC indicator.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use dem::UdsStatusByte;
+    /// let mut s = UdsStatusByte::new(1u8);
+    /// assert!(!s.cdtc());
+    /// s.set_cdtc(true);
+    /// assert!(s.cdtc());
+    /// ```
+    pub fn cdtc(&self) -> bool {
+        self.0 & Self::CDTC_BIT != 0
+    }
+
+    /// Sets the `cdtc` flag (bit 3).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use dem::UdsStatusByte;
+    /// let mut s = UdsStatusByte::new(0);
+    /// s.set_cdtc(true);
+    /// assert!(s.cdtc());
+    /// ```
+    pub fn set_cdtc(&mut self, val: bool) {
+        if val {
+            self.0 |= Self::CDTC_BIT; // sets
+        } else {
+            self.0 &= !Self::CDTC_BIT;
         }
     }
 
@@ -356,5 +390,89 @@ mod tests {
         assert_ne!(s.raw(), UdsStatusByte::TNCTOC_BIT);
         s.clear();
         assert_eq!(s.raw(), 0b0101_0000);
+    }
+
+    #[test]
+    fn status_flags_set_cdtc() {
+        let mut s = UdsStatusByte::new(0);
+        assert!(!s.cdtc());
+        s.set_cdtc(true);
+        assert!(s.cdtc());
+        s.set_cdtc(false);
+        assert!(!s.cdtc());
+    }
+
+    #[test]
+    fn status_flags_clear_resets_cdtc() {
+        let mut s = UdsStatusByte::new(0);
+        s.set_cdtc(true);
+        assert!(s.cdtc());
+        s.clear();
+        assert!(!s.cdtc());
+    }
+
+    #[test]
+    fn status_flags_set_pdtc_unit() {
+        let mut s = UdsStatusByte::new(0);
+        assert!(!s.pdtc());
+        s.set_pdtc(true);
+        assert!(s.pdtc());
+        s.set_pdtc(false);
+        assert!(!s.pdtc());
+    }
+
+    #[test]
+    fn status_flags_set_tftoc_unit() {
+        let mut s = UdsStatusByte::new(0);
+        assert!(!s.tftoc());
+        s.set_tftoc(true);
+        assert!(s.tftoc());
+        // Cannot clear once set
+        s.set_tftoc(false);
+        assert!(s.tftoc());
+    }
+
+    #[test]
+    fn status_flags_set_tfslc_unit() {
+        let mut s = UdsStatusByte::new(0);
+        assert!(!s.tfslc());
+        s.set_tfslc(true);
+        assert!(s.tfslc());
+        s.set_tfslc(false);
+        assert!(!s.tfslc());
+    }
+
+    #[test]
+    fn status_flags_set_tncslc_unit() {
+        let mut s = UdsStatusByte::new(0);
+        assert!(!s.tncslc());
+        s.set_tncslc(true);
+        assert!(s.tncslc());
+        s.set_tncslc(false);
+        assert!(!s.tncslc());
+    }
+
+    #[test]
+    fn status_flags_set_tnctoc_unit() {
+        let mut s = UdsStatusByte::new(0);
+        // new() sets tnctoc to true
+        assert!(s.tnctoc());
+        s.set_tnctoc(false);
+        assert!(!s.tnctoc());
+        // Setting false clears tncslc too
+        s.set_tncslc(true);
+        assert!(s.tncslc());
+        s.set_tnctoc(false);
+        assert!(!s.tncslc());
+    }
+
+    #[test]
+    fn status_flags_new_with_mask() {
+        // Test that new() respects mask for non-forced bits
+        let s = UdsStatusByte::new(0b0000_1000); // bit 3 (cdtc) set
+        assert!(s.cdtc());
+        assert!(!s.tf()); // forced false
+        assert!(!s.tftoc()); // forced false
+        assert!(s.tnctoc()); // forced true
     }
 }
