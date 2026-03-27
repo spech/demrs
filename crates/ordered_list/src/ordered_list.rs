@@ -82,6 +82,17 @@ pub trait HasPriority {
 }
 
 // ─────────────────────────────────────────────
+// Error
+// ─────────────────────────────────────────────
+
+/// Error type for [`OrderedList`] operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderedListError {
+    /// The list has reached its capacity and cannot accept more elements.
+    ListFull,
+}
+
+// ─────────────────────────────────────────────
 // OrderedList - Owned Elements
 // ─────────────────────────────────────────────
 
@@ -180,12 +191,12 @@ impl<T: HasPriority> OrderedList<T> {
     /// # Returns
     ///
     /// - `Ok(())` if the element was inserted successfully
-    /// - `Err(item)` if the list is full (item is returned in the error)
+    /// - `Err(OrderedListError::ListFull)` if the list is full
     ///
     /// # Example
     ///
     /// ```
-    /// use ordered_list::{HasPriority, OrderedList};
+    /// use ordered_list::{HasPriority, OrderedList, OrderedListError};
     ///
     /// #[derive(Debug)]
     /// struct Task(u8);
@@ -194,11 +205,11 @@ impl<T: HasPriority> OrderedList<T> {
     /// let mut list = OrderedList::<Task>::new(2);
     /// assert!(list.insert(Task(1)).is_ok());
     /// assert!(list.insert(Task(2)).is_ok());
-    /// assert!(list.insert(Task(3)).is_err()); // Full
+    /// assert_eq!(list.insert(Task(3)), Err(OrderedListError::ListFull)); // Full
     /// ```
-    pub fn insert(&mut self, item: T) -> Result<(), T> {
+    pub fn insert(&mut self, item: T) -> Result<(), OrderedListError> {
         if self.is_full() {
-            return Err(item);
+            return Err(OrderedListError::ListFull);
         }
 
         let priority = item.priority();
@@ -480,10 +491,10 @@ impl<'a, T: HasPriority + 'a> OrderedListRef<'a, T> {
     /// # Returns
     ///
     /// - `Ok(())` if the reference was inserted successfully
-    /// - `Err(item)` if the list is full
-    pub fn insert(&mut self, item: &'a T) -> Result<(), &'a T> {
+    /// - `Err(OrderedListError::ListFull)` if the list is full
+    pub fn insert(&mut self, item: &'a T) -> Result<(), OrderedListError> {
         if self.is_full() {
-            return Err(item);
+            return Err(OrderedListError::ListFull);
         }
 
         let priority = item.priority();
@@ -639,10 +650,10 @@ impl<T: HasPriority> OrderedListIdx<T> {
     /// # Returns
     ///
     /// - `Ok(())` if the index was inserted successfully
-    /// - `Err(item)` if the list is full
-    pub fn insert(&mut self, item: T) -> Result<(), T> {
+    /// - `Err(OrderedListError::ListFull)` if the list is full
+    pub fn insert(&mut self, item: T) -> Result<(), OrderedListError> {
         if self.is_full() {
-            return Err(item);
+            return Err(OrderedListError::ListFull);
         }
 
         let priority = item.priority();
@@ -815,7 +826,7 @@ mod tests {
         let mut list = OrderedList::<TestEvent>::new(2);
         assert!(list.insert(TestEvent { priority: 1, id: 1 }).is_ok());
         assert!(list.insert(TestEvent { priority: 2, id: 2 }).is_ok());
-        assert!(list.insert(TestEvent { priority: 3, id: 3 }).is_err());
+        assert_eq!(list.insert(TestEvent { priority: 3, id: 3 }), Err(OrderedListError::ListFull));
         assert_eq!(list.len(), 2);
     }
 

@@ -7,4 +7,3 @@ edition = "2024"
 path = "src/confirmator.rs"
 
 [dependencies]
-typed_floats = "1.0.7"
