@@ -117,7 +117,7 @@ pub struct NvmConfig<'a> {
     pub occurence_cntr: &'a mut u8,
     /// Aging cycles represents the number of consecutive cycles where a confirmed event is not failed
     pub aging_cycles: &'a mut u8,
-    /// confirmation cycles represents the number of consecutive cycles where the an event is failed
+    /// Confirmation cycles: number of consecutive cycles where the event is confirmed failed.
     pub confirmation_cycles: &'a mut u8,
 }
 
@@ -238,7 +238,7 @@ impl<'a, 'b> Event<'a, 'b> {
         //store old status event before computing new status
         self.uds_status_old = *self.nv_config.uds_status;
 
-        // if step is not active or the event is desabled: do not debounce
+        // if step is not active or the event is disabled: do not debounce
         if !active || self.disabled {
             if *self.cal_config.debounce_behavior == DebounceBehavior::Reset {
                 self.reset_counter();
@@ -262,7 +262,7 @@ impl<'a, 'b> Event<'a, 'b> {
                         if self.debounce_counter == i16::MAX{
                             self.snap_failed();
                         }
-                    } // else error is disabled
+                    } // else step_up=0: debouncing disabled, counter unchanged
                 }
                 Status::PrePassed => {
                     if *self.cal_config.step_down == 1i16 {
@@ -281,7 +281,7 @@ impl<'a, 'b> Event<'a, 'b> {
                             self.snap_passed();
                         }
                     }
-                } // else event cannot heal
+                } // else step_down=0: healing disabled, counter unchanged
                 Status::Failed => self.snap_failed(),
                 Status::Passed => self.snap_passed(),
             }
@@ -305,9 +305,10 @@ impl<'a, 'b> Event<'a, 'b> {
         self.debounce_counter = 0i16;
     }
 
-    /// Snaps to the failed state: sets counter to `i16::MAX`, `tf` to `true`, and latches flags.
+    /// Snaps to the failed state: sets counter to `i16::MAX` and `tf` to `true`.
     ///
-    /// Also sets `tftoc`, `tfslc`, clears `tnctoc` and `tncslc`, and updates occurrence counter.
+    /// Calls `set_tf(true)` which sets `tftoc`, `tfslc`, `pdtc` and clears `tnctoc`.
+    /// Updates occurrence counter if `tf` transitioned from `false` to `true`.
     fn snap_failed(&mut self) {
         self.debounce_counter = i16::MAX;
         self.nv_config.uds_status.set_tf(true);
