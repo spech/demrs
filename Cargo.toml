@@ -1,6 +1,7 @@
 [workspace]
 members = [
     'crates/confirmator', 
-    'crates/dem'
+    'crates/dem',
+    'crates/ordered_list'
     ]
 
