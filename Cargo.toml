@@ -1,3 +1,6 @@
 [workspace]
-members = ['confirmator', 'dem']
+members = [
+    'crates/confirmator', 
+    'crates/dem'
+    ]
 
