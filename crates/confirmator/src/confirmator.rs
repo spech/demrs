@@ -134,8 +134,7 @@ impl<T: ConfirmatorValue> Confirmator<T> {
                 if self.debounce_counter >= confirmation {
                     self.debounce_counter = confirmation;
                 }
-            }
-            // do nothing already confirmed
+            } // do nothing already confirmed
         } else {
             self.reset();
         }
