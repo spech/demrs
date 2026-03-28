@@ -318,7 +318,10 @@ impl<T: HasPriority> OrderedList<T> {
     ///
     /// Returns `None` if no element with that priority exists.
     pub fn get_by_priority(&self, priority: u8) -> Option<&T> {
-        let idx = self.items.binary_search_by_key(&priority, |x| x.priority()).ok()?;
+        let idx = self
+            .items
+            .binary_search_by_key(&priority, |x| x.priority())
+            .ok()?;
         self.items.get(idx)
     }
 
@@ -561,7 +564,10 @@ impl<'a, T: HasPriority + 'a> OrderedListRef<'a, T> {
     ///
     /// Returns `None` if no element with that priority exists.
     pub fn get_by_priority(&self, priority: u8) -> Option<&&'a T> {
-        let idx = self.items.binary_search_by_key(&priority, |x| x.priority()).ok()?;
+        let idx = self
+            .items
+            .binary_search_by_key(&priority, |x| x.priority())
+            .ok()?;
         self.items.get(idx)
     }
 
@@ -728,7 +734,10 @@ impl<T: HasPriority> OrderedListIdx<T> {
     ///
     /// Returns `None` if no index with that priority exists.
     pub fn get_by_priority(&self, priority: u8) -> Option<&T> {
-        let idx = self.items.binary_search_by_key(&priority, |x| x.priority()).ok()?;
+        let idx = self
+            .items
+            .binary_search_by_key(&priority, |x| x.priority())
+            .ok()?;
         self.items.get(idx)
     }
 
@@ -783,131 +792,449 @@ mod tests {
         }
     }
 
-    #[test]
-    fn ordered_list_insert_ascending() {
-        let mut list = OrderedList::<TestEvent>::new(10);
-        assert!(list.insert(TestEvent { priority: 1, id: 1 }).is_ok());
-        assert!(list.insert(TestEvent { priority: 2, id: 2 }).is_ok());
-        assert!(list.insert(TestEvent { priority: 3, id: 3 }).is_ok());
+    fn create_ordered_list_with(priorities: &[u8]) -> OrderedList<TestEvent> {
+        let mut list = OrderedList::new(priorities.len().max(10));
+        for (i, &priority) in priorities.iter().enumerate() {
+            list.insert(TestEvent {
+                priority,
+                id: (i + 1) as u32,
+            })
+            .unwrap();
+        }
+        list
+    }
 
-        assert_eq!(list.len(), 3);
-        assert_eq!(list.peek_lowest().unwrap().id, 1);
-        assert_eq!(list.peek_highest().unwrap().id, 3);
+    fn create_list_idx_with(priorities: &[u8]) -> OrderedListIdx<TestEvent> {
+        let mut list = OrderedListIdx::new(priorities.len().max(10));
+        for (i, &priority) in priorities.iter().enumerate() {
+            list.insert(TestEvent {
+                priority,
+                id: (i + 1) as u32,
+            })
+            .unwrap();
+        }
+        list
+    }
+
+    fn create_list_ref_with(events: &[TestEvent]) -> OrderedListRef<'_, TestEvent> {
+        let mut list = OrderedListRef::new(events.len().max(10));
+        for event in events {
+            list.insert(event).unwrap();
+        }
+        list
+    }
+
+    fn create_test_events(priorities: &[u8]) -> Vec<TestEvent> {
+        priorities
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| TestEvent {
+                priority: p,
+                id: (i + 1) as u32,
+            })
+            .collect()
+    }
+
+    // ────────────────────────────────────────────
+    // OrderedListIdx Tests
+    // ────────────────────────────────────────────
+
+    #[test]
+    fn ordered_list_idx_new_empty_state() {
+        let list = OrderedListIdx::<TestEvent>::new(10);
+        assert!(list.is_empty());
+        assert!(!list.is_full());
+        assert_eq!(list.capacity(), 10);
+        assert_eq!(list.len(), 0);
+        assert!(list.peek_lowest().is_none());
+        assert!(list.peek_highest().is_none());
     }
 
     #[test]
-    fn ordered_list_insert_descending() {
-        let mut list = OrderedList::<TestEvent>::new(10);
-        assert!(list.insert(TestEvent { priority: 3, id: 3 }).is_ok());
-        assert!(list.insert(TestEvent { priority: 2, id: 2 }).is_ok());
-        assert!(list.insert(TestEvent { priority: 1, id: 1 }).is_ok());
-
-        assert_eq!(list.len(), 3);
-        assert_eq!(list.peek_lowest().unwrap().id, 1);
-        assert_eq!(list.peek_highest().unwrap().id, 3);
+    fn ordered_list_idx_insert_ordering() {
+        let list = create_list_idx_with(&[3, 1, 2, 2, 1]);
+        assert_eq!(list.len(), 5);
+        let ids: Vec<_> = list.iter().map(|e| e.id).collect();
+        assert_eq!(ids, vec![2, 5, 3, 4, 1]);
     }
 
     #[test]
-    fn ordered_list_insert_duplicate_priority() {
-        let mut list = OrderedList::<TestEvent>::new(10);
+    fn ordered_list_idx_insert_full_error() {
+        let mut list = OrderedListIdx::<TestEvent>::new(2);
         assert!(list.insert(TestEvent { priority: 1, id: 1 }).is_ok());
-        assert!(list.insert(TestEvent { priority: 1, id: 2 }).is_ok());
-        assert!(list.insert(TestEvent { priority: 1, id: 3 }).is_ok());
-
-        assert_eq!(list.len(), 3);
-        let items: Vec<_> = list.iter().collect();
-        assert_eq!(items[0].id, 1);
-        assert_eq!(items[1].id, 2);
-        assert_eq!(items[2].id, 3);
+        assert!(list.insert(TestEvent { priority: 2, id: 2 }).is_ok());
+        assert_eq!(
+            list.insert(TestEvent { priority: 3, id: 3 }),
+            Err(OrderedListError::ListFull)
+        );
+        assert!(list.is_full());
     }
 
     #[test]
-    fn ordered_list_insert_full() {
-        let mut list = OrderedList::<TestEvent>::new(2);
-        assert!(list.insert(TestEvent { priority: 1, id: 1 }).is_ok());
-        assert!(list.insert(TestEvent { priority: 2, id: 2 }).is_ok());
-        assert_eq!(list.insert(TestEvent { priority: 3, id: 3 }), Err(OrderedListError::ListFull));
+    fn ordered_list_idx_pop_both_ends() {
+        let mut list = create_list_idx_with(&[1, 2, 3, 4]);
+        assert_eq!(list.pop_lowest().unwrap().id, 1);
+        assert_eq!(list.pop_highest().unwrap().id, 4);
         assert_eq!(list.len(), 2);
-    }
-
-    #[test]
-    fn ordered_list_pop_highest() {
-        let mut list = OrderedList::<TestEvent>::new(10);
-        list.insert(TestEvent { priority: 1, id: 1 }).unwrap();
-        list.insert(TestEvent { priority: 2, id: 2 }).unwrap();
-        list.insert(TestEvent { priority: 3, id: 3 }).unwrap();
-
+        assert_eq!(list.pop_lowest().unwrap().id, 2);
         assert_eq!(list.pop_highest().unwrap().id, 3);
-        assert_eq!(list.pop_highest().unwrap().id, 2);
-        assert_eq!(list.pop_highest().unwrap().id, 1);
+        assert!(list.pop_lowest().is_none());
         assert!(list.pop_highest().is_none());
     }
 
     #[test]
-    fn ordered_list_pop_lowest() {
-        let mut list = OrderedList::<TestEvent>::new(10);
-        list.insert(TestEvent { priority: 1, id: 1 }).unwrap();
-        list.insert(TestEvent { priority: 2, id: 2 }).unwrap();
-        list.insert(TestEvent { priority: 3, id: 3 }).unwrap();
-
-        assert_eq!(list.pop_lowest().unwrap().id, 1);
-        assert_eq!(list.pop_lowest().unwrap().id, 2);
-        assert_eq!(list.pop_lowest().unwrap().id, 3);
-        assert!(list.pop_lowest().is_none());
-    }
-
-    #[test]
-    fn ordered_list_get_by_priority() {
-        let mut list = OrderedList::<TestEvent>::new(10);
-        list.insert(TestEvent { priority: 1, id: 1 }).unwrap();
-        list.insert(TestEvent { priority: 2, id: 2 }).unwrap();
-        list.insert(TestEvent { priority: 3, id: 3 }).unwrap();
-
+    fn ordered_list_idx_get_by_priority() {
+        let list = create_list_idx_with(&[1, 2, 3]);
         assert_eq!(list.get_by_priority(2).unwrap().id, 2);
         assert!(list.get_by_priority(5).is_none());
     }
 
     #[test]
-    fn ordered_list_drain() {
-        let mut list = OrderedList::<TestEvent>::new(10);
-        list.insert(TestEvent { priority: 1, id: 1 }).unwrap();
-        list.insert(TestEvent { priority: 2, id: 2 }).unwrap();
-        list.insert(TestEvent { priority: 3, id: 3 }).unwrap();
-        list.insert(TestEvent { priority: 4, id: 4 }).unwrap();
-
-        let drained: Vec<_> = list.drain_above(2).collect();
-        assert_eq!(drained.len(), 2);
-        assert_eq!(drained[0].id, 3);
-        assert_eq!(drained[1].id, 4);
-        assert_eq!(list.len(), 2);
+    fn ordered_list_idx_clear_and_is_empty() {
+        let mut list = create_list_idx_with(&[1, 2]);
+        assert!(!list.is_empty());
+        list.clear();
+        assert!(list.is_empty());
+        assert_eq!(list.capacity(), 10);
     }
 
     #[test]
-    fn ordered_list_ref() {
-        let events = [
-            TestEvent { priority: 1, id: 1 },
-            TestEvent { priority: 2, id: 2 },
-            TestEvent { priority: 3, id: 3 },
-        ];
+    fn ordered_list_idx_drain_operations() {
+        let mut list = create_list_idx_with(&[1, 2, 3, 4]);
 
-        let mut list = OrderedListRef::<TestEvent>::new(10);
-        for event in &events {
-            list.insert(event).unwrap();
+        let above: Vec<_> = list.drain_above(2).collect();
+        assert_eq!(above.len(), 2);
+        assert_eq!(above[0].id, 3);
+        assert_eq!(above[1].id, 4);
+        assert_eq!(list.len(), 2);
+
+        let below: Vec<_> = list.drain_below(2).collect();
+        assert_eq!(below.len(), 1);
+        assert_eq!(below[0].id, 1);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list.pop_lowest().unwrap().id, 2);
+    }
+
+    #[test]
+    fn ordered_list_idx_drain_below_edge_cases() {
+        let mut empty = create_list_idx_with(&[]);
+        assert_eq!(empty.drain_below(5).count(), 0);
+
+        let mut all = create_list_idx_with(&[1, 2, 3]);
+        assert_eq!(all.drain_below(10).count(), 3);
+
+        let mut none = create_list_idx_with(&[1, 2, 3]);
+        assert_eq!(none.drain_below(0).count(), 0);
+
+        let mut match_case = create_list_idx_with(&[1, 3, 5]);
+        let drained: Vec<_> = match_case.drain_below(3).collect();
+        assert_eq!(drained.len(), 1);
+        assert_eq!(drained[0].priority, 1);
+    }
+
+    #[test]
+    fn ordered_list_idx_range_operations() {
+        let list = create_list_idx_with(&[1, 2, 3, 4, 5]);
+
+        let middle: Vec<_> = list.range(2, 4).collect();
+        assert_eq!(middle.len(), 2);
+
+        let from_lower: Vec<_> = list.range(3, u8::MAX).collect();
+        assert_eq!(from_lower.len(), 3);
+
+        let to_upper: Vec<_> = list.range(0, 3).collect();
+        assert_eq!(to_upper.len(), 2);
+
+        let single: Vec<_> = list.range(3, 4).collect();
+        assert_eq!(single.len(), 1);
+
+        let empty: Vec<_> = list.range(10, 20).collect();
+        assert_eq!(empty.len(), 0);
+
+        let all: Vec<_> = list.range(0, u8::MAX).collect();
+        assert_eq!(all.len(), 5);
+    }
+
+    #[test]
+    fn ordered_list_idx_iter() {
+        let list = create_list_idx_with(&[1, 2, 3]);
+        let priorities: Vec<_> = list.iter().map(|e| e.priority).collect();
+        assert_eq!(priorities, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn ordered_list_idx_iter_mut() {
+        let mut list = create_list_idx_with(&[1, 2, 3]);
+
+        for item in list.iter_mut() {
+            item.id *= 10;
         }
 
-        assert_eq!(list.len(), 3);
-        assert_eq!(list.peek_lowest().unwrap().id, 1);
-        assert_eq!(list.peek_highest().unwrap().id, 3);
+        let ids: Vec<_> = list.iter().map(|e| e.id).collect();
+        assert_eq!(ids, vec![10, 20, 30]);
     }
 
     #[test]
-    fn ordered_list_idx() {
-        let mut list = OrderedListIdx::<TestEvent>::new(10);
-        list.insert(TestEvent { priority: 1, id: 1 }).unwrap();
-        list.insert(TestEvent { priority: 2, id: 2 }).unwrap();
-        list.insert(TestEvent { priority: 3, id: 3 }).unwrap();
+    fn ordered_list_idx_iter_mut_empty() {
+        let mut empty = create_list_idx_with(&[]);
+        let collected: Vec<_> = empty.iter_mut().collect();
+        assert_eq!(collected.len(), 0);
+    }
 
-        assert_eq!(list.len(), 3);
+    #[test]
+    fn ordered_list_idx_into_iter() {
+        let list = create_list_idx_with(&[3, 1, 2]);
+        let priorities: Vec<_> = list.into_iter().map(|e| e.priority).collect();
+        assert_eq!(priorities, vec![1, 2, 3]);
+    }
+
+    // ────────────────────────────────────────────
+    // OrderedList Tests
+    // ────────────────────────────────────────────
+
+    #[test]
+    fn ordered_list_new_empty_state() {
+        let list = OrderedList::<TestEvent>::new(10);
+        assert!(list.is_empty());
+        assert!(!list.is_full());
+        assert_eq!(list.capacity(), 10);
+        assert_eq!(list.len(), 0);
+        assert!(list.peek_lowest().is_none());
+        assert!(list.peek_highest().is_none());
+    }
+
+    #[test]
+    fn ordered_list_insert_ordering() {
+        let list = create_ordered_list_with(&[3, 1, 2, 2, 1]);
+        assert_eq!(list.len(), 5);
+        let ids: Vec<_> = list.iter().map(|e| e.id).collect();
+        assert_eq!(ids, vec![2, 5, 3, 4, 1]);
+    }
+
+    #[test]
+    fn ordered_list_insert_full_error() {
+        let mut list = OrderedList::<TestEvent>::new(2);
+        assert!(list.insert(TestEvent { priority: 1, id: 1 }).is_ok());
+        assert!(list.insert(TestEvent { priority: 2, id: 2 }).is_ok());
+        assert_eq!(
+            list.insert(TestEvent { priority: 3, id: 3 }),
+            Err(OrderedListError::ListFull)
+        );
+        assert!(list.is_full());
+    }
+
+    #[test]
+    fn ordered_list_pop_both_ends() {
+        let mut list = create_ordered_list_with(&[1, 2, 3, 4]);
+        assert_eq!(list.pop_lowest().unwrap().id, 1);
+        assert_eq!(list.pop_highest().unwrap().id, 4);
+        assert_eq!(list.len(), 2);
+        assert_eq!(list.pop_lowest().unwrap().id, 2);
         assert_eq!(list.pop_highest().unwrap().id, 3);
+        assert!(list.pop_lowest().is_none());
+        assert!(list.pop_highest().is_none());
+    }
+
+    #[test]
+    fn ordered_list_get_by_priority() {
+        let list = create_ordered_list_with(&[1, 2, 3]);
+        assert_eq!(list.get_by_priority(2).unwrap().id, 2);
+        assert!(list.get_by_priority(5).is_none());
+    }
+
+    #[test]
+    fn ordered_list_clear_and_is_empty() {
+        let mut list = create_ordered_list_with(&[1, 2]);
+        assert!(!list.is_empty());
+        list.clear();
+        assert!(list.is_empty());
+        assert_eq!(list.capacity(), 10);
+    }
+
+    #[test]
+    fn ordered_list_drain_operations() {
+        let mut list = create_ordered_list_with(&[1, 2, 3, 4]);
+
+        let above: Vec<_> = list.drain_above(2).collect();
+        assert_eq!(above.len(), 2);
+        assert_eq!(above[0].id, 3);
+        assert_eq!(above[1].id, 4);
+        assert_eq!(list.len(), 2);
+
+        let below: Vec<_> = list.drain_below(2).collect();
+        assert_eq!(below.len(), 1);
+        assert_eq!(below[0].id, 1);
+        assert_eq!(list.len(), 1);
+        assert_eq!(list.pop_lowest().unwrap().id, 2);
+    }
+
+    #[test]
+    fn ordered_list_drain_below_edge_cases() {
+        let mut empty = create_ordered_list_with(&[]);
+        assert_eq!(empty.drain_below(5).count(), 0);
+
+        let mut all = create_ordered_list_with(&[1, 2, 3]);
+        assert_eq!(all.drain_below(10).count(), 3);
+
+        let mut none = create_ordered_list_with(&[1, 2, 3]);
+        assert_eq!(none.drain_below(0).count(), 0);
+
+        let mut match_case = create_ordered_list_with(&[1, 3, 5]);
+        let drained: Vec<_> = match_case.drain_below(3).collect();
+        assert_eq!(drained.len(), 1);
+        assert_eq!(drained[0].priority, 1);
+    }
+
+    #[test]
+    fn ordered_list_range_operations() {
+        let list = create_ordered_list_with(&[1, 2, 3, 4, 5]);
+
+        let middle: Vec<_> = list.range(2, 4).collect();
+        assert_eq!(middle.len(), 2);
+
+        let from_lower: Vec<_> = list.range(3, u8::MAX).collect();
+        assert_eq!(from_lower.len(), 3);
+
+        let to_upper: Vec<_> = list.range(0, 3).collect();
+        assert_eq!(to_upper.len(), 2);
+
+        let single: Vec<_> = list.range(3, 4).collect();
+        assert_eq!(single.len(), 1);
+
+        let empty: Vec<_> = list.range(10, 20).collect();
+        assert_eq!(empty.len(), 0);
+
+        let all: Vec<_> = list.range(0, u8::MAX).collect();
+        assert_eq!(all.len(), 5);
+    }
+
+    #[test]
+    fn ordered_list_iter() {
+        let list = create_ordered_list_with(&[1, 2, 3]);
+        let priorities: Vec<_> = list.iter().map(|e| e.priority).collect();
+        assert_eq!(priorities, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn ordered_list_iter_mut() {
+        let mut list = create_ordered_list_with(&[1, 2, 3]);
+
+        for item in list.iter_mut() {
+            item.id *= 10;
+        }
+
+        let ids: Vec<_> = list.iter().map(|e| e.id).collect();
+        assert_eq!(ids, vec![10, 20, 30]);
+    }
+
+    #[test]
+    fn ordered_list_iter_mut_empty() {
+        let mut empty = create_ordered_list_with(&[]);
+        let collected: Vec<_> = empty.iter_mut().collect();
+        assert_eq!(collected.len(), 0);
+    }
+
+    #[test]
+    fn ordered_list_into_iter() {
+        let list = create_ordered_list_with(&[3, 1, 2]);
+        let priorities: Vec<_> = list.into_iter().map(|e| e.priority).collect();
+        assert_eq!(priorities, vec![1, 2, 3]);
+    }
+
+    // ────────────────────────────────────────────
+    // OrderedListRef Tests
+    // ────────────────────────────────────────────
+
+    #[test]
+    fn ordered_list_ref_new_empty_state() {
+        let list = OrderedListRef::<TestEvent>::new(10);
+        assert!(list.is_empty());
+        assert!(!list.is_full());
+        assert_eq!(list.capacity(), 10);
+        assert_eq!(list.len(), 0);
+        assert!(list.peek_lowest().is_none());
+        assert!(list.peek_highest().is_none());
+    }
+
+    #[test]
+    fn ordered_list_ref_insert_ordering() {
+        let events = create_test_events(&[3, 1, 2, 2, 1]);
+        let list = create_list_ref_with(&events);
+        assert_eq!(list.len(), 5);
+        let ids: Vec<_> = list.iter().map(|e| e.id).collect();
+        assert_eq!(ids, vec![2, 5, 3, 4, 1]);
+    }
+
+    #[test]
+    fn ordered_list_ref_insert_full_error() {
+        let events = create_test_events(&[1, 2]);
+        let mut list = OrderedListRef::<TestEvent>::new(2);
+        assert!(list.insert(&events[0]).is_ok());
+        assert!(list.insert(&events[1]).is_ok());
+        assert_eq!(list.insert(&events[0]), Err(OrderedListError::ListFull));
+        assert!(list.is_full());
+    }
+
+    #[test]
+    fn ordered_list_ref_pop_both_ends() {
+        let events = create_test_events(&[1, 2, 3, 4]);
+        let mut list = create_list_ref_with(&events);
+        assert_eq!(list.pop_lowest().unwrap().id, 1);
+        assert_eq!(list.pop_highest().unwrap().id, 4);
+        assert_eq!(list.len(), 2);
+        assert_eq!(list.pop_lowest().unwrap().id, 2);
+        assert_eq!(list.pop_highest().unwrap().id, 3);
+        assert!(list.pop_lowest().is_none());
+        assert!(list.pop_highest().is_none());
+    }
+
+    #[test]
+    fn ordered_list_ref_get_by_priority() {
+        let events = create_test_events(&[1, 2, 3]);
+        let list = create_list_ref_with(&events);
+        assert_eq!(list.get_by_priority(2).unwrap().id, 2);
+        assert!(list.get_by_priority(5).is_none());
+    }
+
+    #[test]
+    fn ordered_list_ref_clear_and_is_empty() {
+        let events = create_test_events(&[1, 2]);
+        let mut list = create_list_ref_with(&events);
+        assert!(!list.is_empty());
+        list.clear();
+        assert!(list.is_empty());
+        assert_eq!(list.capacity(), 10);
+    }
+
+    #[test]
+    fn ordered_list_ref_range_operations() {
+        let events = create_test_events(&[1, 2, 3, 4, 5]);
+        let list = create_list_ref_with(&events);
+
+        let middle: Vec<_> = list.range(2, 4).collect();
+        assert_eq!(middle.len(), 2);
+
+        let from_lower: Vec<_> = list.range(3, u8::MAX).collect();
+        assert_eq!(from_lower.len(), 3);
+
+        let to_upper: Vec<_> = list.range(0, 3).collect();
+        assert_eq!(to_upper.len(), 2);
+
+        let single: Vec<_> = list.range(3, 4).collect();
+        assert_eq!(single.len(), 1);
+
+        let empty: Vec<_> = list.range(10, 20).collect();
+        assert_eq!(empty.len(), 0);
+
+        let all: Vec<_> = list.range(0, u8::MAX).collect();
+        assert_eq!(all.len(), 5);
+    }
+
+    #[test]
+    fn ordered_list_ref_iter() {
+        let events = create_test_events(&[1, 2, 3]);
+        let list = create_list_ref_with(&events);
+        let priorities: Vec<_> = list.iter().map(|e| e.priority).collect();
+        assert_eq!(priorities, vec![1, 2, 3]);
     }
 }
