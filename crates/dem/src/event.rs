@@ -87,30 +87,30 @@ pub enum EventError {
 
 /// Calibration configuration for [`Event`].
 ///
-/// This struct holds references to step counts, debounce behavior, type,
+/// This struct holds step counts, debounce behavior, type,
 /// and priority, allowing a single configuration to be shared across multiple events.
-/// All fields are lifetime-bound to ensure the config outlives the event.
-pub struct CalibConfig<'a> {
+#[derive(Clone)]
+pub struct CalibConfig {
     /// Number of `PreFailed` ticks to reach `i16::MAX`.
     /// - `0`: Counter unchanged (no debouncing).
     /// - `1`: Immediate snap to confirmed.
     /// - `n > 1`: Gradual accumulation.
-    pub step_up: &'a i16,
+    pub step_up: i16,
     /// Number of `PrePassed` ticks to reach `i16::MIN`.
     /// - `0`: Counter unchanged.
     /// - `1`: Immediate snap.
     /// - `n > 1`: Gradual accumulation.
-    pub step_down: &'a i16,
+    pub step_down: i16,
     /// Behavior when the event is disabled.
-    pub debounce_behavior: &'a DebounceBehavior,
+    pub debounce_behavior: DebounceBehavior,
     /// How the counter is changed (tick-based or time-based).
-    pub debounce_type: &'a DebounceType,
+    pub debounce_type: DebounceType,
     /// Number of cycles where failure must be confirmed before setting `cdtc`.
-    pub confirmation_threshold: &'a u8,
+    pub confirmation_threshold: u8,
     /// Number of aging cycles before clearing `cdtc`.
-    pub aging_threshold: &'a u8,
+    pub aging_threshold: u8,
     /// Priority of this event in the ordered list.
-    pub priority: &'a u8,
+    pub priority: u8,
 }
 
 // ─────────────────────────────────────────────
@@ -121,15 +121,16 @@ pub struct CalibConfig<'a> {
 ///
 /// Holds persistent state for the event, including status flags and counters.
 /// This allows events to maintain history across power cycles or resets.
-pub struct NvmConfig<'a> {
+#[derive(Clone)]
+pub struct NvmConfig {
     /// The underlying UDS status byte for this event.
-    pub uds_status: &'a mut UdsStatusByte,
+    pub uds_status: UdsStatusByte,
     /// Occurrence counter: number of times `tf` transitioned from `false` to `true`.
-    pub occurence_cntr: &'a mut u8,
+    pub occurence_cntr: u8,
     /// Aging cycles represents the number of consecutive cycles where a confirmed event is not failed
-    pub aging_cycles: &'a mut u8,
+    pub aging_cycles: u8,
     /// Confirmation cycles: number of consecutive cycles where the event is confirmed failed.
-    pub confirmation_cycles: &'a mut u8,
+    pub confirmation_cycles: u8,
 }
 
 // ─────────────────────────────────────────────
@@ -153,15 +154,15 @@ pub struct NvmConfig<'a> {
 /// ## Usage
 ///
 /// Create an `Event` with [`CalibConfig`] and [`NvmConfig`], then call [`step`] with status signals.
-pub struct Event<'a, 'b> {
+pub struct Event {
     debounce_counter: i16,
     uds_status_old: UdsStatusByte,
     disabled: bool,
-    nv_config: &'b mut NvmConfig<'b>,
-    cal_config: &'a CalibConfig<'a>,
+    nv_config: NvmConfig,
+    cal_config: CalibConfig,
 }
 
-impl<'a, 'b> Event<'a, 'b> {
+impl Event {
     /// Creates a new `Event` with the given configurations.
     ///
     /// # Arguments
@@ -172,13 +173,13 @@ impl<'a, 'b> Event<'a, 'b> {
     /// # Returns
     ///
     /// A new `Event` instance, initialized with counter at 0 and status copied.
-    pub fn new(nv_config: &'b mut NvmConfig<'b>, cal_config: &'a CalibConfig<'a>) -> Self {
+    pub fn new(nv_config: NvmConfig, cal_config: CalibConfig) -> Self {
         Self {
             debounce_counter: 0i16,
-            uds_status_old: *nv_config.uds_status,
+            uds_status_old: nv_config.uds_status,
             disabled: false,
-            nv_config: nv_config,
-            cal_config: cal_config,
+            nv_config,
+            cal_config,
         }
     }
 
@@ -198,19 +199,19 @@ impl<'a, 'b> Event<'a, 'b> {
         if !self.nv_config.uds_status.tftoc() && !self.nv_config.uds_status.tnctoc() {
             self.nv_config.uds_status.set_pdtc(false);
             if self.nv_config.uds_status.cdtc() {
-                *self.nv_config.aging_cycles = self.nv_config.aging_cycles.saturating_add(1u8);
-                if *self.nv_config.aging_cycles == *self.cal_config.aging_threshold {
+                self.nv_config.aging_cycles = self.nv_config.aging_cycles.saturating_add(1u8);
+                if self.nv_config.aging_cycles == self.cal_config.aging_threshold {
                     self.nv_config.uds_status.set_cdtc(false);
-                    *self.nv_config.confirmation_cycles = 0u8;
+                    self.nv_config.confirmation_cycles = 0u8;
                 }
             }
         }
         if self.nv_config.uds_status.tftoc() {
-            *self.nv_config.confirmation_cycles =
+            self.nv_config.confirmation_cycles =
                 self.nv_config.confirmation_cycles.saturating_add(1u8);
-            if *self.nv_config.confirmation_cycles == *self.cal_config.confirmation_threshold {
+            if self.nv_config.confirmation_cycles == self.cal_config.confirmation_threshold {
                 self.nv_config.uds_status.set_cdtc(true);
-                *self.nv_config.aging_cycles = 0u8;
+                self.nv_config.aging_cycles = 0u8;
             }
         }
         self.disabled = true;
@@ -222,9 +223,9 @@ impl<'a, 'b> Event<'a, 'b> {
     /// clears `tfslc`, and resets occurrence counters. Preserves `tftoc`.
     pub fn clear(&mut self) {
         self.reset_counter();
-        *self.nv_config.occurence_cntr = 0u8;
-        *self.nv_config.confirmation_cycles = 0u8;
-        *self.nv_config.aging_cycles = 0u8;
+        self.nv_config.occurence_cntr = 0u8;
+        self.nv_config.confirmation_cycles = 0u8;
+        self.nv_config.aging_cycles = 0u8;
         self.nv_config.uds_status.clear();
         self.uds_status_old.clear();
     }
@@ -248,7 +249,7 @@ impl<'a, 'b> Event<'a, 'b> {
         active: bool,
         sampling: f32,
     ) -> Result<UdsStatusByte, EventError> {
-        if *self.cal_config.debounce_type == DebounceType::TimeBased {
+        if self.cal_config.debounce_type == DebounceType::TimeBased {
             if sampling < 0.0 {
                 return Err(EventError::NegativeSampling);
             }
@@ -257,44 +258,42 @@ impl<'a, 'b> Event<'a, 'b> {
             }
         }
 
-        //store old status event before computing new status
-        self.uds_status_old = *self.nv_config.uds_status;
+        self.uds_status_old = self.nv_config.uds_status;
 
-        // if step is not active or the event is disabled: do not debounce
         if !active || self.disabled {
-            if *self.cal_config.debounce_behavior == DebounceBehavior::Reset {
+            if self.cal_config.debounce_behavior == DebounceBehavior::Reset {
                 self.reset_counter();
             }
         } else {
             match condition {
                 Status::PreFailed => {
-                    if *self.cal_config.step_up == 1i16 {
+                    if self.cal_config.step_up == 1i16 {
                         self.snap_failed();
-                    } else if *self.cal_config.step_up != 0i16 {
+                    } else if self.cal_config.step_up != 0i16 {
                         if self.debounce_counter < 0i16 {
                             self.reset_counter();
                         }
-                        let mut increment: i16 = *self.cal_config.step_up;
-                        if *self.cal_config.debounce_type == DebounceType::TimeBased {
-                            increment = div_round(*self.cal_config.step_up, sampling as i16);
+                        let mut increment: i16 = self.cal_config.step_up;
+                        if self.cal_config.debounce_type == DebounceType::TimeBased {
+                            increment = div_round(self.cal_config.step_up, sampling as i16);
                         }
                         increment = div_round(i16::MAX, increment);
                         self.debounce_counter = self.debounce_counter.saturating_add(increment);
                         if self.debounce_counter == i16::MAX {
                             self.snap_failed();
                         }
-                    } // else step_up=0: debouncing disabled, counter unchanged
+                    }
                 }
                 Status::PrePassed => {
-                    if *self.cal_config.step_down == 1i16 {
+                    if self.cal_config.step_down == 1i16 {
                         self.snap_passed();
-                    } else if *self.cal_config.step_down != 0i16 {
+                    } else if self.cal_config.step_down != 0i16 {
                         if self.debounce_counter > 0i16 {
                             self.reset_counter();
                         }
-                        let mut decrement = *self.cal_config.step_down;
-                        if *self.cal_config.debounce_type == DebounceType::TimeBased {
-                            decrement = div_round(*self.cal_config.step_down, sampling as i16);
+                        let mut decrement = self.cal_config.step_down;
+                        if self.cal_config.debounce_type == DebounceType::TimeBased {
+                            decrement = div_round(self.cal_config.step_down, sampling as i16);
                         }
                         decrement = div_round(i16::MAX, decrement);
                         self.debounce_counter = self.debounce_counter.saturating_sub(decrement);
@@ -302,13 +301,13 @@ impl<'a, 'b> Event<'a, 'b> {
                             self.snap_passed();
                         }
                     }
-                } // else step_down=0: healing disabled, counter unchanged
+                }
                 Status::Failed => self.snap_failed(),
                 Status::Passed => self.snap_passed(),
             }
         }
 
-        Ok(*self.nv_config.uds_status)
+        Ok(self.nv_config.uds_status)
     }
 
     /// Current accumulated debounce_counter.
@@ -318,32 +317,26 @@ impl<'a, 'b> Event<'a, 'b> {
 
     /// Returns the current status byte.
     pub fn status(&self) -> UdsStatusByte {
-        *self.nv_config.uds_status
+        self.nv_config.uds_status
     }
 
     /// Returns the priority of this event from the calibration config.
     pub fn priority(&self) -> u8 {
-        *self.cal_config.priority
+        self.cal_config.priority
     }
 
-    /// Resets the debounce counter to zero without changing status flags.
     fn reset_counter(&mut self) {
         self.debounce_counter = 0i16;
     }
 
-    /// Snaps to the failed state: sets counter to `i16::MAX` and `tf` to `true`.
-    ///
-    /// Calls `set_tf(true)` which sets `tftoc`, `tfslc`, `pdtc` and clears `tnctoc`.
-    /// Updates occurrence counter if `tf` transitioned from `false` to `true`.
     fn snap_failed(&mut self) {
         self.debounce_counter = i16::MAX;
         self.nv_config.uds_status.set_tf(true);
         if self.uds_status_old.raw() & UdsStatusByte::TF_BIT != UdsStatusByte::TF_BIT {
-            *self.nv_config.occurence_cntr = self.nv_config.occurence_cntr.saturating_add(1u8);
+            self.nv_config.occurence_cntr = self.nv_config.occurence_cntr.saturating_add(1u8);
         }
     }
 
-    /// Snaps to the passed state: sets counter to `i16::MIN`, `tf` to `false`, and clears completion flags.
     fn snap_passed(&mut self) {
         self.debounce_counter = i16::MIN;
         self.nv_config.uds_status.set_tf(false);
@@ -366,7 +359,6 @@ fn div_round(a: i16, b: i16) -> i16 {
 mod tests {
     use super::*;
 
-    // Helper to create lifetime-bound CalibConfig
     fn create_cal_config(
         step_up: i16,
         step_down: i16,
@@ -374,43 +366,16 @@ mod tests {
         aging_thr: u8,
         debounce_type: DebounceType,
         priority: u8,
-    ) -> (CalibConfig<'static>, i16, i16, u8, u8, u8) {
-        create_cal_config_with_behavior(
+        debounce_behavior: DebounceBehavior,
+    ) -> (CalibConfig, i16, i16, u8, u8, u8) {
+        let cfg = CalibConfig {
             step_up,
             step_down,
-            confirmation_thr,
-            aging_thr,
+            debounce_behavior,
             debounce_type,
+            confirmation_threshold: confirmation_thr,
+            aging_threshold: aging_thr,
             priority,
-            DebounceBehavior::Freeze,
-        )
-    }
-
-    fn create_cal_config_with_behavior(
-        step_up: i16,
-        step_down: i16,
-        confirmation_thr: u8,
-        aging_thr: u8,
-        debounce_type: DebounceType,
-        priority: u8,
-        debounce_behavior: DebounceBehavior,
-    ) -> (CalibConfig<'static>, i16, i16, u8, u8, u8) {
-        let step_up_val = Box::leak(Box::new(step_up));
-        let step_down_val = Box::leak(Box::new(step_down));
-        let confirmation_val = Box::leak(Box::new(confirmation_thr));
-        let aging_val = Box::leak(Box::new(aging_thr));
-        let debounce_type_val = Box::leak(Box::new(debounce_type));
-        let priority_val = Box::leak(Box::new(priority));
-        let debounce_behavior_val = Box::leak(Box::new(debounce_behavior));
-
-        let cfg = CalibConfig {
-            step_up: step_up_val,
-            step_down: step_down_val,
-            debounce_behavior: debounce_behavior_val,
-            debounce_type: debounce_type_val,
-            confirmation_threshold: confirmation_val,
-            aging_threshold: aging_val,
-            priority: priority_val,
         };
 
         (
@@ -423,84 +388,87 @@ mod tests {
         )
     }
 
-    // Helper to create NvmConfig with optional initial values (defaults to 0)
-    fn create_nvm_config(occ: u8, aging: u8, confirm: u8) -> NvmConfig<'static> {
-        let uds_val = Box::leak(Box::new(UdsStatusByte::new(0)));
-        let occ_val = Box::leak(Box::new(occ));
-        let aging_val = Box::leak(Box::new(aging));
-        let confirm_val = Box::leak(Box::new(confirm));
-
-        NvmConfig {
-            uds_status: uds_val,
-            occurence_cntr: occ_val,
-            aging_cycles: aging_val,
-            confirmation_cycles: confirm_val,
-        }
-    }
-
-    // Helper to create NvmConfig with specific UdsStatusByte flags
-    fn create_nvm_config_with_flags(
+    fn create_nvm_config(
         occ: u8,
         aging: u8,
         confirm: u8,
         tftoc: bool,
         tnctoc: bool,
         cdtc: bool,
-    ) -> NvmConfig<'static> {
+    ) -> NvmConfig {
         let mut uds = UdsStatusByte::new(0);
         uds.set_tftoc(tftoc);
         uds.set_tnctoc(tnctoc);
         uds.set_cdtc(cdtc);
-        let uds_val = Box::leak(Box::new(uds));
-        let occ_val = Box::leak(Box::new(occ));
-        let aging_val = Box::leak(Box::new(aging));
-        let confirm_val = Box::leak(Box::new(confirm));
 
         NvmConfig {
-            uds_status: uds_val,
-            occurence_cntr: occ_val,
-            aging_cycles: aging_val,
-            confirmation_cycles: confirm_val,
+            uds_status: uds,
+            occurence_cntr: occ,
+            aging_cycles: aging,
+            confirmation_cycles: confirm,
         }
     }
 
     // ────────────────────────────────────────────
-    // Lifetime Configuration Tests
+    // Configuration Tests
     // ────────────────────────────────────────────
 
     #[test]
-    fn config_thresholds_are_referenced() {
-        let (cfg, _, _, expected_conf, expected_aging, _) =
-            create_cal_config(2, 0, 3, 5, DebounceType::CounterBased, 0);
-        assert_eq!(*cfg.confirmation_threshold, expected_conf);
-        assert_eq!(*cfg.aging_threshold, expected_aging);
+    fn calib_config_fields_accessible() {
+        let (cfg, _, _, expected_conf, expected_aging, _) = create_cal_config(
+            2,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        assert_eq!(cfg.confirmation_threshold, expected_conf);
+        assert_eq!(cfg.aging_threshold, expected_aging);
     }
 
     #[test]
-    fn nvm_config_uses_references() {
-        let n_cfg = create_nvm_config(5, 2, 3);
+    fn nvm_config_fields_accessible() {
+        let n_cfg = create_nvm_config(5, 2, 3, false, true, false);
 
-        assert_eq!(*n_cfg.occurence_cntr, 5u8);
-        assert_eq!(*n_cfg.aging_cycles, 2u8);
-        assert_eq!(*n_cfg.confirmation_cycles, 3u8);
+        assert_eq!(n_cfg.occurence_cntr, 5u8);
+        assert_eq!(n_cfg.aging_cycles, 2u8);
+        assert_eq!(n_cfg.confirmation_cycles, 3u8);
     }
 
     #[test]
-    fn event_accesses_threshold_through_reference() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 4, 6, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+    fn event_cal_config_accessible() {
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            4,
+            6,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let evt = Event::new(&mut n_cfg, &c_cfg);
-        assert_eq!(*evt.cal_config.confirmation_threshold, 4u8);
-        assert_eq!(*evt.cal_config.aging_threshold, 6u8);
+        let evt = Event::new(n_cfg, c_cfg);
+        assert_eq!(evt.cal_config.confirmation_threshold, 4u8);
+        assert_eq!(evt.cal_config.aging_threshold, 6u8);
     }
 
     #[test]
     fn event_priority_returns_config_value() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 42);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            42,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let evt = Event::new(&mut n_cfg, &c_cfg);
+        let evt = Event::new(n_cfg, c_cfg);
         assert_eq!(evt.priority(), 42);
     }
 
@@ -510,10 +478,18 @@ mod tests {
 
     #[test]
     fn prefailed_increments_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         assert!(evt.status().tf());
@@ -521,10 +497,18 @@ mod tests {
 
     #[test]
     fn prepassed_decrements_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(0, 1, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            0,
+            1,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::PrePassed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MIN);
@@ -533,10 +517,18 @@ mod tests {
 
     #[test]
     fn failed_status_immediate_confirmation() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(2, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            2,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         assert!(evt.status().tf());
@@ -544,10 +536,18 @@ mod tests {
 
     #[test]
     fn prefailed_no_debounce_when_step_up_zero() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(0, 1, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            0,
+            1,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), 0);
         assert!(!evt.status().tf());
@@ -555,10 +555,18 @@ mod tests {
 
     #[test]
     fn prefailed_accumulates_and_snaps() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(2, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            2,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::Passed, true, 0.0).unwrap();
         assert!(!evt.status().tf());
@@ -575,10 +583,18 @@ mod tests {
 
     #[test]
     fn prepassed_no_debounce_when_step_down_zero() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
 
@@ -589,10 +605,18 @@ mod tests {
 
     #[test]
     fn passed_status_immediate_clear() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(0, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            0,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
         evt.step(Status::Passed, true, 0.0).unwrap();
@@ -602,10 +626,18 @@ mod tests {
 
     #[test]
     fn counter_saturates_at_max() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
@@ -614,10 +646,18 @@ mod tests {
 
     #[test]
     fn counter_saturates_at_min() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(0, 1, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            0,
+            1,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::PrePassed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MIN);
@@ -627,10 +667,18 @@ mod tests {
 
     #[test]
     fn disabled_event_freezes_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         let counter_val = evt.debounce_counter();
         evt.disable(true);
@@ -640,7 +688,7 @@ mod tests {
 
     #[test]
     fn disabled_event_resets_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config_with_behavior(
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
@@ -649,9 +697,9 @@ mod tests {
             0,
             DebounceBehavior::Reset,
         );
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert!(evt.debounce_counter() > 0);
         evt.disable(true);
@@ -661,10 +709,18 @@ mod tests {
 
     #[test]
     fn clear_resets_debounce_state() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert!(evt.status().tf());
         evt.clear();
@@ -674,10 +730,18 @@ mod tests {
 
     #[test]
     fn prepassed_accumulates_and_snaps() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(0, 2, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            0,
+            2,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
 
@@ -695,11 +759,19 @@ mod tests {
     // ────────────────────────────────────────────
 
     #[test]
-    fn threshold_references_compile_and_dereference() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        // This test verifies that thresholds are properly lifetime-bound references
-        assert_eq!(*c_cfg.confirmation_threshold, 3u8);
-        assert_eq!(*c_cfg.aging_threshold, 5u8);
+    fn calib_config_thresholds_set_correctly() {
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        // This test verifies that thresholds are set correctly
+        assert_eq!(c_cfg.confirmation_threshold, 3u8);
+        assert_eq!(c_cfg.aging_threshold, 5u8);
     }
 
     // ────────────────────────────────────────────
@@ -708,10 +780,18 @@ mod tests {
 
     #[test]
     fn timebased_prefailed_with_sampling_period() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(100, 0, 3, 5, DebounceType::TimeBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            100,
+            0,
+            3,
+            5,
+            DebounceType::TimeBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         // With sampling_period=10ms, should reduce effective step_up
         evt.step(Status::PreFailed, true, 10.0).unwrap();
         assert!(evt.debounce_counter() > 0);
@@ -720,10 +800,18 @@ mod tests {
 
     #[test]
     fn timebased_prefailed_accumulates_with_multiple_steps() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(100, 0, 3, 5, DebounceType::TimeBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            100,
+            0,
+            3,
+            5,
+            DebounceType::TimeBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         let counter_after_first = {
             evt.step(Status::PreFailed, true, 10.0).unwrap();
             evt.debounce_counter()
@@ -738,10 +826,18 @@ mod tests {
 
     #[test]
     fn timebased_prepassed_with_sampling_period() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(0, 100, 3, 5, DebounceType::TimeBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            0,
+            100,
+            3,
+            5,
+            DebounceType::TimeBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.step(Status::Failed, true, 10.0).unwrap();
         assert!(evt.status().tf());
 
@@ -753,31 +849,45 @@ mod tests {
 
     #[test]
     fn timebased_sampling_period_affects_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1000, 0, 3, 5, DebounceType::TimeBased, 0);
-        let mut n_cfg1 = create_nvm_config(0, 0, 0);
-        let mut n_cfg2 = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1000,
+            0,
+            3,
+            5,
+            DebounceType::TimeBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg1 = create_nvm_config(0, 0, 0, false, true, false);
+        let n_cfg2 = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt1 = Event::new(&mut n_cfg1, &c_cfg);
+        let mut evt1 = Event::new(n_cfg1, c_cfg.clone());
         evt1.step(Status::PreFailed, true, 10.0).unwrap();
         let counter_10ms = evt1.debounce_counter();
 
-        let mut evt2 = Event::new(&mut n_cfg2, &c_cfg);
+        let mut evt2 = Event::new(n_cfg2, c_cfg);
         evt2.step(Status::PreFailed, true, 100.0).unwrap();
         let counter_100ms = evt2.debounce_counter();
 
-        // Different sampling periods should result in different counter values
         assert_ne!(counter_10ms, counter_100ms);
-        // Both should be positive
         assert!(counter_10ms > 0);
         assert!(counter_100ms > 0);
     }
 
     #[test]
     fn timebased_negative_sampling_error() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(100, 0, 3, 5, DebounceType::TimeBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            100,
+            0,
+            3,
+            5,
+            DebounceType::TimeBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         assert_eq!(
             evt.step(Status::PreFailed, true, -1.0),
             Err(EventError::NegativeSampling)
@@ -786,10 +896,18 @@ mod tests {
 
     #[test]
     fn timebased_zero_sampling_error() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(100, 0, 3, 5, DebounceType::TimeBased, 0);
-        let mut n_cfg = create_nvm_config(0, 0, 0);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            100,
+            0,
+            3,
+            5,
+            DebounceType::TimeBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         assert_eq!(
             evt.step(Status::PreFailed, true, 0.0),
             Err(EventError::ZeroSampling)
@@ -802,11 +920,19 @@ mod tests {
 
     #[test]
     fn stop_not_failed_aging_sets_pdtc_false() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config_with_flags(0, 0, 0, false, false, true);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, false, true);
 
         let status = {
-            let mut evt = Event::new(&mut n_cfg, &c_cfg);
+            let mut evt = Event::new(n_cfg, c_cfg);
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(evt.status().cdtc());
@@ -820,11 +946,19 @@ mod tests {
 
     #[test]
     fn stop_not_failed_aging_completes_clears_cdtc() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config_with_flags(0, 4, 0, false, false, true);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 4, 0, false, false, true);
 
         let status = {
-            let mut evt = Event::new(&mut n_cfg, &c_cfg);
+            let mut evt = Event::new(n_cfg, c_cfg);
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(evt.status().cdtc());
@@ -838,11 +972,19 @@ mod tests {
 
     #[test]
     fn stop_not_failed_no_cdtc() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config_with_flags(0, 0, 0, false, false, false);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, false, false);
 
         let status = {
-            let mut evt = Event::new(&mut n_cfg, &c_cfg);
+            let mut evt = Event::new(n_cfg, c_cfg);
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(!evt.status().cdtc());
@@ -856,11 +998,19 @@ mod tests {
 
     #[test]
     fn stop_failed_sets_cdtc() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config_with_flags(0, 0, 2, true, false, false);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 2, true, false, false);
 
         let status = {
-            let mut evt = Event::new(&mut n_cfg, &c_cfg);
+            let mut evt = Event::new(n_cfg, c_cfg);
             assert!(evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(!evt.status().cdtc());
@@ -873,10 +1023,18 @@ mod tests {
 
     #[test]
     fn stop_disables_event() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(1, 0, 3, 5, DebounceType::CounterBased, 0);
-        let mut n_cfg = create_nvm_config_with_flags(0, 0, 0, false, false, true);
+        let (c_cfg, _, _, _, _, _) = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            0,
+            DebounceBehavior::Freeze,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, false, true);
 
-        let mut evt = Event::new(&mut n_cfg, &c_cfg);
+        let mut evt = Event::new(n_cfg, c_cfg);
         evt.stop();
         assert!(evt.status().cdtc());
         evt.step(Status::PreFailed, true, 0.0).unwrap();
