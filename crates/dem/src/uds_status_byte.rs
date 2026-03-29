@@ -37,12 +37,12 @@
 pub struct UdsStatusByte(u8);
 
 impl UdsStatusByte {
-    pub(crate) const TF_BIT:     u8 = 1 << 0; // bit 0
-    pub(crate) const TFTOC_BIT:  u8 = 1 << 1; // bit 1
-    pub(crate) const PDTC_BIT:   u8 = 1 << 2; // bit 2
-    pub(crate) const CDTC_BIT:   u8 = 1 << 3; // bit 3
+    pub(crate) const TF_BIT: u8 = 1 << 0; // bit 0
+    pub(crate) const TFTOC_BIT: u8 = 1 << 1; // bit 1
+    pub(crate) const PDTC_BIT: u8 = 1 << 2; // bit 2
+    pub(crate) const CDTC_BIT: u8 = 1 << 3; // bit 3
     pub(crate) const TNCSLC_BIT: u8 = 1 << 4; // bit 4
-    pub(crate) const TFSLC_BIT:  u8 = 1 << 5; // bit 5
+    pub(crate) const TFSLC_BIT: u8 = 1 << 5; // bit 5
     pub(crate) const TNCTOC_BIT: u8 = 1 << 6; // bit 6
 
     /// Creates a `UdsStatusByte` from a raw bitmask.
@@ -99,10 +99,8 @@ impl UdsStatusByte {
     /// ```
     pub fn set_tf(&mut self, val: bool) {
         if val {
-            self.0 = self.0 | Self::TF_BIT | Self::TFTOC_BIT |
-                      Self::PDTC_BIT | Self::TFSLC_BIT; // sets
+            self.0 = self.0 | Self::TF_BIT | Self::TFTOC_BIT | Self::PDTC_BIT | Self::TFSLC_BIT; // sets
             self.set_tnctoc(false); // clears
-
         } else {
             self.0 &= !Self::TF_BIT;
             // tftoc and tfslc are not cleared here
@@ -204,7 +202,9 @@ impl UdsStatusByte {
     /// assert!(s.tftoc());
     /// ```
     pub fn set_tftoc(&mut self, val: bool) {
-        if val { self.0 |= Self::TFTOC_BIT; }
+        if val {
+            self.0 |= Self::TFTOC_BIT;
+        }
         // never cleared
     }
 
@@ -236,8 +236,11 @@ impl UdsStatusByte {
     /// assert!(s.tncslc());
     /// ```
     pub fn set_tncslc(&mut self, val: bool) {
-        if val { self.0 |= Self::TNCSLC_BIT; }
-        else   { self.0 &= !Self::TNCSLC_BIT; }
+        if val {
+            self.0 |= Self::TNCSLC_BIT;
+        } else {
+            self.0 &= !Self::TNCSLC_BIT;
+        }
     }
 
     /// Returns the `tfslc` flag (bit 5) — failure since last clear.
@@ -268,8 +271,11 @@ impl UdsStatusByte {
     /// assert!(!s.tfslc());
     /// ```
     pub fn set_tfslc(&mut self, val: bool) {
-        if val { self.0 |= Self::TFSLC_BIT; }
-        else   { self.0 &= !Self::TFSLC_BIT; }
+        if val {
+            self.0 |= Self::TFSLC_BIT;
+        } else {
+            self.0 &= !Self::TFSLC_BIT;
+        }
     }
 
     /// Returns the `tnctoc` flag (bit 6) — not-complete this operating cycle.
@@ -302,8 +308,9 @@ impl UdsStatusByte {
     /// assert!(!s.tncslc()); // dropped with tnctoc
     /// ```
     pub fn set_tnctoc(&mut self, val: bool) {
-        if val { self.0 |= Self::TNCTOC_BIT; }
-        else   {
+        if val {
+            self.0 |= Self::TNCTOC_BIT;
+        } else {
             self.0 &= !Self::TNCTOC_BIT & !Self::TNCSLC_BIT;
         }
     }
@@ -358,14 +365,14 @@ mod tests {
         s.set_tf(true);
         assert!(s.tf());
         assert!(!s.tnctoc());
-        s.set_tf(false); 
+        s.set_tf(false);
         assert!(!s.tnctoc());
     }
 
     #[test]
     fn status_flags_set_tf_then_tftoc_and_pdtc_latches_permanently() {
         let mut s = UdsStatusByte::new(0);
-        s.set_tf(true);  // tftoc and tfslc latch
+        s.set_tf(true); // tftoc and tfslc latch
         assert!(s.tftoc());
         assert!(s.pdtc());
         s.set_tf(false); // tf clears, tftoc and tfslc stay
@@ -377,7 +384,7 @@ mod tests {
     #[test]
     fn status_flags_set_tf_and_tfslc_latches_permanently() {
         let mut s = UdsStatusByte::new(0);
-        s.set_tf(true);  // tftoc and tfslc latch
+        s.set_tf(true); // tftoc and tfslc latch
         assert!(s.tfslc());
         s.set_tf(false); // tf clears, tftoc and tfslc stay
         assert!(!s.tf());
