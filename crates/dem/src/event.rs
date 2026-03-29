@@ -140,16 +140,465 @@ pub struct NvmConfig {
 
 pub type EventId = u16;
 
+/// Persistent data associated with an [`Event`].
+///
+/// Stores event metadata that survives across power cycles, including:
+/// - Event identifier
+/// - Priority for ordering in [`ExtendedRecordList`]
+/// - Timestamps for first and last save operations
+///
+/// ## Usage
+///
+/// [`ExtendedRecord`] instances are stored in [`ExtendedRecordList`]
+/// and managed by [`EventManager`].
+#[derive(Clone)]
 pub struct ExtendedRecord {
+    /// Unique identifier for this event.
     pub event_id: EventId,
+    /// Priority value used for ordering in [`ExtendedRecordList`].
     pub priority: u8,
+    /// Timestamp of the first save operation.
     pub date_at_first_save: Option<DateTime<Utc>>,
+    /// Timestamp of the last save operation.
     pub date_at_last_save: Option<DateTime<Utc>>,
 }
 
-impl ordered_list::HasPriority for ExtendedRecord {
-    fn priority(&self) -> u8 {
-        self.priority
+// ─────────────────────────────────────────────
+// EventManagerError
+// ─────────────────────────────────────────────
+
+/// Error type for [`EventManager`] operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventManagerError {
+    /// The extended records list has reached its maximum capacity.
+    ListFull,
+}
+
+// ─────────────────────────────────────────────
+// ExtendedRecordList
+// ─────────────────────────────────────────────
+
+/// A fixed-capacity list of [`ExtendedRecord`] entries.
+///
+/// Maintains [`ExtendedRecord`] entries sorted by priority in ascending order.
+/// Used for storing persistent event metadata that survives across power cycles.
+///
+/// ## Capacity
+///
+/// The list has a fixed capacity of 24 entries. Attempting to insert
+/// when full returns [`EventManagerError::ListFull`].
+///
+/// ## Usage
+///
+/// Create an instance with [`ExtendedRecordList::new()`], insert records
+/// with [`ExtendedRecordList::insert()`], and access them via
+/// [`ExtendedRecordList::get()`] or iterators.
+pub struct ExtendedRecordList {
+    data: [Option<ExtendedRecord>; 24],
+    len: usize,
+}
+
+impl ExtendedRecordList {
+    const CAPACITY: usize = 24;
+
+    /// Creates a new, empty `ExtendedRecordList`.
+    ///
+    /// # Returns
+    ///
+    /// A new empty list with capacity for 24 entries.
+    pub const fn new() -> Self {
+        Self {
+            data: [const { None }; 24],
+            len: 0,
+        }
+    }
+
+    /// Returns the number of entries in the list.
+    ///
+    /// # Returns
+    ///
+    /// The current number of entries.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns `true` if the list contains no entries.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the list is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Returns `true` if the list has reached its maximum capacity.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the list is full (24 entries).
+    pub fn is_full(&self) -> bool {
+        self.len == Self::CAPACITY
+    }
+
+    /// Returns a reference to the entry at the given index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The index of the entry to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// `Some(&ExtendedRecord)` if the index is valid, `None` otherwise.
+    pub fn get(&self, index: usize) -> Option<&ExtendedRecord> {
+        if index < self.len {
+            self.data[index].as_ref()
+        } else {
+            None
+        }
+    }
+
+    /// Returns a mutable reference to the entry at the given index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The index of the entry to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// `Some(&mut ExtendedRecord)` if the index is valid, `None` otherwise.
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut ExtendedRecord> {
+        if index < self.len {
+            self.data[index].as_mut()
+        } else {
+            None
+        }
+    }
+
+    /// Returns a reference to the entry with the given priority.
+    ///
+    /// # Arguments
+    ///
+    /// * `priority` - The priority value to search for.
+    ///
+    /// # Returns
+    ///
+    /// `Some(&ExtendedRecord)` if an entry with the given priority exists, `None` otherwise.
+    pub fn get_by_priority(&self, priority: u8) -> Option<&ExtendedRecord> {
+        self.iter_by_priority()
+            .find(|ext_rec| ext_rec.priority == priority)
+    }
+
+    /// Returns an iterator over all entries in insertion order.
+    ///
+    /// # Returns
+    ///
+    /// An iterator yielding references to entries.
+    pub fn iter(&self) -> impl Iterator<Item = &ExtendedRecord> {
+        self.data
+            .iter()
+            .take(self.len)
+            .filter_map(|opt| opt.as_ref())
+    }
+
+    /// Returns a mutable iterator over all entries in insertion order.
+    ///
+    /// # Returns
+    ///
+    /// An iterator yielding mutable references to entries.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut ExtendedRecord> {
+        self.data
+            .iter_mut()
+            .take(self.len)
+            .filter_map(|opt| opt.as_mut())
+    }
+
+    /// Returns an iterator over all entries sorted by priority (ascending).
+    ///
+    /// # Returns
+    ///
+    /// An iterator yielding references to entries sorted by priority.
+    pub fn iter_by_priority(&self) -> impl Iterator<Item = &ExtendedRecord> {
+        let mut items: Vec<&ExtendedRecord> = self.iter().collect();
+        items.sort_by_key(|ext_rec| ext_rec.priority);
+        items.into_iter()
+    }
+
+    /// Inserts a new entry into the list, maintaining priority order.
+    ///
+    /// The entry is inserted at the position that maintains ascending priority order.
+    ///
+    /// # Arguments
+    ///
+    /// * `ext_rec` - The entry to insert.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if insertion succeeded, `Err(EventManagerError::ListFull)` if the list is full.
+    pub fn insert(&mut self, ext_rec: ExtendedRecord) -> Result<(), EventManagerError> {
+        if self.is_full() {
+            return Err(EventManagerError::ListFull);
+        }
+
+        let priority = ext_rec.priority;
+
+        let pos = self.data[..self.len]
+            .iter()
+            .position(|opt| opt.as_ref().map(|e| e.priority > priority).unwrap_or(false))
+            .unwrap_or(self.len);
+
+        for i in (pos..self.len).rev() {
+            self.data[i + 1] = self.data[i].take();
+        }
+
+        self.data[pos] = Some(ext_rec);
+        self.len += 1;
+        Ok(())
+    }
+
+    /// Removes and returns the entry at the given index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The index of the entry to remove.
+    ///
+    /// # Returns
+    ///
+    /// `Some(ExtendedRecord)` if the index is valid, `None` otherwise.
+    pub fn remove(&mut self, index: usize) -> Option<ExtendedRecord> {
+        if index >= self.len {
+            return None;
+        }
+
+        let removed = self.data[index].take();
+
+        for i in index..self.len - 1 {
+            self.data[i] = self.data[i + 1].take();
+        }
+
+        self.len -= 1;
+        removed
+    }
+
+    /// Removes and returns the entry with the given priority.
+    ///
+    /// # Arguments
+    ///
+    /// * `priority` - The priority of the entry to remove.
+    ///
+    /// # Returns
+    ///
+    /// `Some(ExtendedRecord)` if an entry with the given priority exists, `None` otherwise.
+    pub fn remove_by_priority(&mut self, priority: u8) -> Option<ExtendedRecord> {
+        let index = self.data[..self.len].iter().position(|opt| {
+            opt.as_ref()
+                .map(|e| e.priority == priority)
+                .unwrap_or(false)
+        });
+
+        if let Some(idx) = index {
+            self.remove(idx)
+        } else {
+            None
+        }
+    }
+
+    /// Removes all entries from the list.
+    pub fn clear(&mut self) {
+        for i in 0..self.len {
+            self.data[i] = None;
+        }
+        self.len = 0;
+    }
+
+    /// Removes and returns the entry with the highest priority.
+    ///
+    /// # Returns
+    ///
+    /// `Some(ExtendedRecord)` if the list is not empty, `None` otherwise.
+    pub fn pop_highest(&mut self) -> Option<ExtendedRecord> {
+        if self.len == 0 {
+            return None;
+        }
+
+        let max_priority = self.data[..self.len]
+            .iter()
+            .filter_map(|opt| opt.as_ref())
+            .map(|e| e.priority)
+            .max()?;
+
+        self.remove_by_priority(max_priority)
+    }
+
+    /// Removes and returns the entry with the lowest priority.
+    ///
+    /// # Returns
+    ///
+    /// `Some(ExtendedRecord)` if the list is not empty, `None` otherwise.
+    pub fn pop_lowest(&mut self) -> Option<ExtendedRecord> {
+        if self.len == 0 {
+            return None;
+        }
+
+        let min_priority = self.data[..self.len]
+            .iter()
+            .filter_map(|opt| opt.as_ref())
+            .map(|e| e.priority)
+            .min()?;
+
+        self.remove_by_priority(min_priority)
+    }
+
+    /// Returns all entries with priority within the inclusive range `[from, to]`.
+    ///
+    /// # Arguments
+    ///
+    /// * `from` - Lower bound of the priority range (inclusive).
+    /// * `to` - Upper bound of the priority range (inclusive).
+    ///
+    /// # Returns
+    ///
+    /// A vector of references to entries within the specified priority range.
+    pub fn range(&self, from: u8, to: u8) -> Vec<&ExtendedRecord> {
+        self.iter_by_priority()
+            .filter(|ext_rec| ext_rec.priority >= from && ext_rec.priority <= to)
+            .collect()
+    }
+
+    /// Removes and returns all entries with priority greater than the given value.
+    ///
+    /// # Arguments
+    ///
+    /// * `priority` - Entries with priority > this value are removed.
+    ///
+    /// # Returns
+    ///
+    /// A vector containing all removed entries, in ascending priority order.
+    pub fn drain_above(&mut self, priority: u8) -> Vec<ExtendedRecord> {
+        let mut drained = Vec::new();
+
+        let indices: Vec<usize> = self.data[..self.len]
+            .iter()
+            .enumerate()
+            .filter(|(_, opt)| opt.as_ref().map(|e| e.priority > priority).unwrap_or(false))
+            .map(|(i, _)| i)
+            .collect();
+
+        for idx in indices.into_iter().rev() {
+            if let Some(ext_rec) = self.remove(idx) {
+                drained.push(ext_rec);
+            }
+        }
+
+        drained.into_iter().rev().collect()
+    }
+
+    /// Removes and returns all entries with priority less than the given value.
+    ///
+    /// # Arguments
+    ///
+    /// * `priority` - Entries with priority < this value are removed.
+    ///
+    /// # Returns
+    ///
+    /// A vector containing all removed entries, in ascending priority order.
+    pub fn drain_below(&mut self, priority: u8) -> Vec<ExtendedRecord> {
+        let mut drained = Vec::new();
+
+        let indices: Vec<usize> = self.data[..self.len]
+            .iter()
+            .enumerate()
+            .filter(|(_, opt)| opt.as_ref().map(|e| e.priority < priority).unwrap_or(false))
+            .map(|(i, _)| i)
+            .collect();
+
+        for idx in indices.into_iter().rev() {
+            if let Some(ext_rec) = self.remove(idx) {
+                drained.push(ext_rec);
+            }
+        }
+
+        drained.into_iter().rev().collect()
+    }
+
+    /// Removes and returns all entries with priority within the inclusive range `[from, to]`.
+    ///
+    /// # Arguments
+    ///
+    /// * `from` - Lower bound of the priority range (inclusive).
+    /// * `to` - Upper bound of the priority range (inclusive).
+    ///
+    /// # Returns
+    ///
+    /// A vector containing all removed entries, in ascending priority order.
+    pub fn drain_range(&mut self, from: u8, to: u8) -> Vec<ExtendedRecord> {
+        let mut drained = Vec::new();
+
+        let indices: Vec<usize> = self.data[..self.len]
+            .iter()
+            .enumerate()
+            .filter(|(_, opt)| {
+                opt.as_ref()
+                    .map(|e| e.priority >= from && e.priority <= to)
+                    .unwrap_or(false)
+            })
+            .map(|(i, _)| i)
+            .collect();
+
+        for idx in indices.into_iter().rev() {
+            if let Some(ext_rec) = self.remove(idx) {
+                drained.push(ext_rec);
+            }
+        }
+
+        drained.into_iter().rev().collect()
+    }
+}
+
+// ─────────────────────────────────────────────
+// EventManager
+// ─────────────────────────────────────────────
+
+/// Manages a collection of [`Event`]s and their associated [`ExtendedRecord`] data.
+///
+/// The `EventManager` coordinates debouncing logic and persistent storage
+/// for diagnostic event handling. It holds references to static event data
+/// and extended records that persist across power cycles.
+///
+/// ## Storage
+///
+/// - `events` - Slice of [`Event`] instances with fixed static addresses
+/// - `extended_records` - Reference to [`ExtendedRecordList`] for persistent metadata
+///
+/// ## Usage
+///
+/// Create an `EventManager` by passing static references to event data
+/// and extended records storage.
+pub struct EventManager {
+    /// All managed [`Event`] instances.
+    events: &'static mut [Event],
+    /// Persistent extended record storage.
+    extended_records: &'static mut ExtendedRecordList,
+}
+
+impl EventManager {
+    /// Creates a new `EventManager` with the given static references.
+    ///
+    /// # Arguments
+    ///
+    /// * `events` - Static slice of [`Event`] instances.
+    /// * `extended_records` - Static reference to [`ExtendedRecordList`].
+    ///
+    /// # Returns
+    ///
+    /// A new `EventManager` instance managing the provided events and records.
+    pub fn new(
+        events: &'static mut [Event],
+        extended_records: &'static mut ExtendedRecordList,
+    ) -> Self {
+        Self {
+            events,
+            extended_records,
+        }
     }
 }
 
@@ -173,40 +622,40 @@ impl ordered_list::HasPriority for ExtendedRecord {
 ///
 /// ## Usage
 ///
-/// Create an `Event` with [`CalibConfig`], [`NvmConfig`], and [`ExtendedRecord`], then call [`step`] with status signals.
-pub struct Event<'a> {
+/// Create an `Event` with [`CalibConfig`] and [`NvmConfig`], then call [`step`] with status signals.
+pub struct Event {
+    event_id: EventId,
     debounce_counter: i16,
     uds_status_old: UdsStatusByte,
     disabled: bool,
-    nv_config: NvmConfig,
-    cal_config: CalibConfig,
-    extended_record: &'a ExtendedRecord,
+    nv_config: &'static mut NvmConfig,
+    cal_config: &'static CalibConfig,
 }
 
-impl<'a> Event<'a> {
+impl Event {
     /// Creates a new `Event` with the given configurations.
     ///
     /// # Arguments
     ///
+    /// * `event_id` - Unique identifier for this event.
     /// * `nv_config` - Non-volatile config holding persistent state.
     /// * `cal_config` - Calibration config with step counts and behavior.
-    /// * `extended_record` - Extended record with event metadata.
     ///
     /// # Returns
     ///
     /// A new `Event` instance, initialized with counter at 0 and status copied.
     pub fn new(
-        nv_config: NvmConfig,
-        cal_config: CalibConfig,
-        extended_record: &'a ExtendedRecord,
+        event_id: EventId,
+        nv_config: &'static mut NvmConfig,
+        cal_config: &'static CalibConfig,
     ) -> Self {
         Self {
+            event_id,
             debounce_counter: 0i16,
             uds_status_old: nv_config.uds_status,
             disabled: false,
             nv_config,
             cal_config,
-            extended_record,
         }
     }
 
@@ -393,27 +842,17 @@ mod tests {
         aging_thr: u8,
         debounce_type: DebounceType,
         debounce_behavior: DebounceBehavior,
-    ) -> (CalibConfig, i16, i16, u8, u8) {
-        let cfg = CalibConfig {
+        priority: u8,
+    ) -> &'static CalibConfig {
+        Box::leak(Box::new(CalibConfig {
             step_up,
             step_down,
             debounce_behavior,
             debounce_type,
             confirmation_threshold: confirmation_thr,
             aging_threshold: aging_thr,
-            priority: 0,
-        };
-
-        (cfg, step_up, step_down, confirmation_thr, aging_thr)
-    }
-
-    fn create_extended_record(event_id: EventId, priority: u8) -> ExtendedRecord {
-        ExtendedRecord {
-            event_id,
             priority,
-            date_at_first_save: None,
-            date_at_last_save: None,
-        }
+        }))
     }
 
     fn create_nvm_config(
@@ -423,18 +862,18 @@ mod tests {
         tftoc: bool,
         tnctoc: bool,
         cdtc: bool,
-    ) -> NvmConfig {
+    ) -> &'static mut NvmConfig {
         let mut uds = UdsStatusByte::new(0);
         uds.set_tftoc(tftoc);
         uds.set_tnctoc(tnctoc);
         uds.set_cdtc(cdtc);
 
-        NvmConfig {
+        Box::leak(Box::new(NvmConfig {
             uds_status: uds,
             occurence_cntr: occ,
             aging_cycles: aging,
             confirmation_cycles: confirm,
-        }
+        }))
     }
 
     // ────────────────────────────────────────────
@@ -443,16 +882,17 @@ mod tests {
 
     #[test]
     fn calib_config_fields_accessible() {
-        let (cfg, _, _, expected_conf, expected_aging) = create_cal_config(
+        let cfg = create_cal_config(
             2,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
-        assert_eq!(cfg.confirmation_threshold, expected_conf);
-        assert_eq!(cfg.aging_threshold, expected_aging);
+        assert_eq!(cfg.confirmation_threshold, 3);
+        assert_eq!(cfg.aging_threshold, 5);
     }
 
     #[test]
@@ -466,37 +906,36 @@ mod tests {
 
     #[test]
     fn event_cal_config_accessible() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             4,
             6,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let evt = Event::new(0, n_cfg, c_cfg);
         assert_eq!(evt.cal_config.confirmation_threshold, 4u8);
         assert_eq!(evt.cal_config.aging_threshold, 6u8);
     }
 
     #[test]
     fn event_priority_returns_config_value() {
-        let (mut c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            42,
         );
-        c_cfg.priority = 42;
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
-        let ext_rec = create_extended_record(0, 0);
 
-        let evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let evt = Event::new(0, n_cfg, c_cfg);
         assert_eq!(evt.priority(), 42);
     }
 
@@ -506,18 +945,18 @@ mod tests {
 
     #[test]
     fn prefailed_increments_counter() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         assert!(evt.status().tf());
@@ -525,18 +964,18 @@ mod tests {
 
     #[test]
     fn prepassed_decrements_counter() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             0,
             1,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::PrePassed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MIN);
@@ -545,18 +984,18 @@ mod tests {
 
     #[test]
     fn failed_status_immediate_confirmation() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             2,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         assert!(evt.status().tf());
@@ -564,18 +1003,18 @@ mod tests {
 
     #[test]
     fn prefailed_no_debounce_when_step_up_zero() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             0,
             1,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), 0);
         assert!(!evt.status().tf());
@@ -583,18 +1022,18 @@ mod tests {
 
     #[test]
     fn prefailed_accumulates_and_snaps() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             2,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::Passed, true, 0.0).unwrap();
         assert!(!evt.status().tf());
@@ -611,18 +1050,18 @@ mod tests {
 
     #[test]
     fn prepassed_no_debounce_when_step_down_zero() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
 
@@ -633,18 +1072,18 @@ mod tests {
 
     #[test]
     fn passed_status_immediate_clear() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             0,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
         evt.step(Status::Passed, true, 0.0).unwrap();
@@ -654,18 +1093,18 @@ mod tests {
 
     #[test]
     fn counter_saturates_at_max() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
@@ -674,18 +1113,18 @@ mod tests {
 
     #[test]
     fn counter_saturates_at_min() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             0,
             1,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::PrePassed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MIN);
@@ -695,18 +1134,18 @@ mod tests {
 
     #[test]
     fn disabled_event_freezes_counter() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         let counter_val = evt.debounce_counter();
         evt.disable(true);
@@ -716,18 +1155,18 @@ mod tests {
 
     #[test]
     fn disabled_event_resets_counter() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Reset,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert!(evt.debounce_counter() > 0);
         evt.disable(true);
@@ -737,18 +1176,18 @@ mod tests {
 
     #[test]
     fn clear_resets_debounce_state() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert!(evt.status().tf());
         evt.clear();
@@ -758,18 +1197,18 @@ mod tests {
 
     #[test]
     fn prepassed_accumulates_and_snaps() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             0,
             2,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
 
@@ -788,13 +1227,14 @@ mod tests {
 
     #[test]
     fn calib_config_thresholds_set_correctly() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         // This test verifies that thresholds are set correctly
         assert_eq!(c_cfg.confirmation_threshold, 3u8);
@@ -807,18 +1247,18 @@ mod tests {
 
     #[test]
     fn timebased_prefailed_with_sampling_period() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             100,
             0,
             3,
             5,
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         // With sampling_period=10ms, should reduce effective step_up
         evt.step(Status::PreFailed, true, 10.0).unwrap();
         assert!(evt.debounce_counter() > 0);
@@ -827,18 +1267,18 @@ mod tests {
 
     #[test]
     fn timebased_prefailed_accumulates_with_multiple_steps() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             100,
             0,
             3,
             5,
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         let counter_after_first = {
             evt.step(Status::PreFailed, true, 10.0).unwrap();
             evt.debounce_counter()
@@ -853,18 +1293,18 @@ mod tests {
 
     #[test]
     fn timebased_prepassed_with_sampling_period() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             0,
             100,
             3,
             5,
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.step(Status::Failed, true, 10.0).unwrap();
         assert!(evt.status().tf());
 
@@ -876,24 +1316,23 @@ mod tests {
 
     #[test]
     fn timebased_sampling_period_affects_counter() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1000,
             0,
             3,
             5,
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg1 = create_nvm_config(0, 0, 0, false, true, false);
         let n_cfg2 = create_nvm_config(0, 0, 0, false, true, false);
-        let ext_rec1 = create_extended_record(0, 0);
-        let ext_rec2 = create_extended_record(0, 0);
 
-        let mut evt1 = Event::new(n_cfg1, c_cfg.clone(), &ext_rec1);
+        let mut evt1 = Event::new(0, n_cfg1, c_cfg);
         evt1.step(Status::PreFailed, true, 10.0).unwrap();
         let counter_10ms = evt1.debounce_counter();
 
-        let mut evt2 = Event::new(n_cfg2, c_cfg, &ext_rec2);
+        let mut evt2 = Event::new(0, n_cfg2, c_cfg);
         evt2.step(Status::PreFailed, true, 100.0).unwrap();
         let counter_100ms = evt2.debounce_counter();
 
@@ -904,18 +1343,18 @@ mod tests {
 
     #[test]
     fn timebased_negative_sampling_error() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             100,
             0,
             3,
             5,
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         assert_eq!(
             evt.step(Status::PreFailed, true, -1.0),
             Err(EventError::NegativeSampling)
@@ -924,18 +1363,18 @@ mod tests {
 
     #[test]
     fn timebased_zero_sampling_error() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             100,
             0,
             3,
             5,
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         assert_eq!(
             evt.step(Status::PreFailed, true, 0.0),
             Err(EventError::ZeroSampling)
@@ -948,19 +1387,19 @@ mod tests {
 
     #[test]
     fn stop_not_failed_aging_sets_pdtc_false() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, false, true);
 
         let status = {
-            let ext_rec = create_extended_record(0, 0);
-            let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+            let mut evt = Event::new(0, n_cfg, c_cfg);
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(evt.status().cdtc());
@@ -974,19 +1413,19 @@ mod tests {
 
     #[test]
     fn stop_not_failed_aging_completes_clears_cdtc() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 4, 0, false, false, true);
 
         let status = {
-            let ext_rec = create_extended_record(0, 0);
-            let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+            let mut evt = Event::new(0, n_cfg, c_cfg);
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(evt.status().cdtc());
@@ -1000,19 +1439,19 @@ mod tests {
 
     #[test]
     fn stop_not_failed_no_cdtc() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, false, false);
 
         let status = {
-            let ext_rec = create_extended_record(0, 0);
-            let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+            let mut evt = Event::new(0, n_cfg, c_cfg);
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(!evt.status().cdtc());
@@ -1026,19 +1465,19 @@ mod tests {
 
     #[test]
     fn stop_failed_sets_cdtc() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 2, true, false, false);
 
         let status = {
-            let ext_rec = create_extended_record(0, 0);
-            let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+            let mut evt = Event::new(0, n_cfg, c_cfg);
             assert!(evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(!evt.status().cdtc());
@@ -1051,18 +1490,18 @@ mod tests {
 
     #[test]
     fn stop_disables_event() {
-        let (c_cfg, _, _, _, _) = create_cal_config(
+        let c_cfg = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
+            0,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, false, true);
 
-        let ext_rec = create_extended_record(0, 0);
-        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
+        let mut evt = Event::new(0, n_cfg, c_cfg);
         evt.stop();
         assert!(evt.status().cdtc());
         evt.step(Status::PreFailed, true, 0.0).unwrap();
