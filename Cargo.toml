@@ -1,6 +1,8 @@
 [workspace]
-members = [
-    'crates/confirmator', 
-    'crates/dem'
-    ]
+    members = [
+        'crates/confirmator', 
+        'crates/dem',
+        'crates/ordered_list'
+        ]
+    resolver = "3"
 

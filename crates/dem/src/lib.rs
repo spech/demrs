@@ -1,5 +1,6 @@
-mod uds_status_byte;
 mod event;
+mod extended_record;
+mod uds_status_byte;
 
-pub use uds_status_byte::{UdsStatusByte};
-//pub use error_confirmator::{ErrorConfirmator, ErrorCalibConfig, DebounceBehavior, ConditionState};
+pub use extended_record::{EventId, EventManagerError, ExtendedRecord, ExtendedRecordList};
+pub use uds_status_byte::UdsStatusByte;

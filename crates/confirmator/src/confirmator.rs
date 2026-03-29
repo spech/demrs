@@ -1,33 +1,54 @@
-use typed_floats::tf32::Positive;
+// ─────────────────────────────────────────────
+// Error
+// ─────────────────────────────────────────────
+
+/// Error type for [`Confirmator`] operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfirmatorError {
+    NegativeConfirmation,
+}
 
 // ─────────────────────────────────────────────
 // Trait
 // ─────────────────────────────────────────────
 
 /// Trait bound for types supported by Confirmator and ErrorConfirmator.
-pub trait ConfirmatorValue:
-    Copy + Default + PartialOrd 
-{
+pub trait ConfirmatorValue: Copy + PartialOrd {
     fn zero() -> Self;
-    fn one() -> Self;
     fn saturating_add(self, rhs: Self) -> Self;
 }
 
 impl ConfirmatorValue for u8 {
-    fn zero() -> Self { 0 }   fn one() -> Self { 1 }
-    fn saturating_add(self, rhs: Self) -> Self { u8::saturating_add(self, rhs) }
+    fn zero() -> Self {
+        0
+    }
+    fn saturating_add(self, rhs: Self) -> Self {
+        u8::saturating_add(self, rhs)
+    }
 }
 impl ConfirmatorValue for u16 {
-    fn zero() -> Self { 0 }   fn one() -> Self { 1 }
-    fn saturating_add(self, rhs: Self) -> Self { u16::saturating_add(self, rhs) }
+    fn zero() -> Self {
+        0
+    }
+    fn saturating_add(self, rhs: Self) -> Self {
+        u16::saturating_add(self, rhs)
+    }
 }
 impl ConfirmatorValue for u32 {
-    fn zero() -> Self { 0 }   fn one() -> Self { 1 }
-    fn saturating_add(self, rhs: Self) -> Self { u32::saturating_add(self, rhs) }
+    fn zero() -> Self {
+        0
+    }
+    fn saturating_add(self, rhs: Self) -> Self {
+        u32::saturating_add(self, rhs)
+    }
 }
-impl ConfirmatorValue for Positive {
-    fn zero() -> Self { 0.0.try_into().unwrap() } fn one() -> Self { 1.0.try_into().unwrap() }
-    fn saturating_add(self, rhs: Self) -> Self { (self + rhs).min( f32::MAX.try_into().unwrap()) }
+impl ConfirmatorValue for f32 {
+    fn zero() -> Self {
+        0.0
+    }
+    fn saturating_add(self, rhs: Self) -> Self {
+        self + rhs
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -38,17 +59,18 @@ impl ConfirmatorValue for Positive {
 ///
 /// - Each `true` tick adds `step` to `debounce_counter`, saturating at `confirmation`.
 /// - Any `false` tick resets `debounce_counter` to zero.
-/// - Returns `true` once `debounce_counter == confirmation`, `false` otherwise.
+/// - Returns `Ok(true)` once `debounce_counter == confirmation`, `Ok(false)` otherwise.
 /// - Returns `condition` when `confirmation` is 0
+/// - Returns `Err(ConfirmatorError::NegativeConfirmation)` if `confirmation` is negative.
 ///
 /// # Example
 /// ```
 /// # use confirmator::Confirmator;
 /// let mut c = Confirmator::<u32>::new();
-/// assert!(!c.step(true, None, 3));  // 1
-/// assert!(!c.step(true, None, 3));  // 2
-/// assert!( c.step(true, None, 3));  // 3 → confirmed
-/// c.step(false, None, 3);           // reset
+/// assert!(!c.step(true, 1, 3).unwrap());  // 1
+/// assert!(!c.step(true, 1, 3).unwrap());  // 2
+/// assert!( c.step(true, 1, 3).unwrap());  // 3 → confirmed
+/// c.step(false, 1, 3);           // reset
 /// assert_eq!(c.debounce_counter(), 0);
 /// ```
 pub struct Confirmator<T: ConfirmatorValue> {
@@ -65,36 +87,46 @@ impl<T: ConfirmatorValue> Confirmator<T> {
     /// assert_eq!(c.debounce_counter(), 0);
     /// ```
     pub fn new() -> Self {
-        Self { debounce_counter: T::zero() }
+        Self {
+            debounce_counter: T::zero(),
+        }
     }
 
     /// Advance or reset the confirmator.
     ///
     /// # Arguments
     /// * `condition`    - The boolean signal to confirm.
-    /// * `step`         - Progress added per true tick. Defaults to `1` if `None`.
+    /// * `step`         - Progress added per true tick.
     /// * `confirmation` - Threshold that must be reached to confirm. `0` for immediateness.
     ///
     /// # Returns
-    /// when `confirmation` is zero
-    /// `true` if `condition` is true, `false` otherwise.
-    /// `true` if `debounce_counter >= confirmation`, `false` otherwise.
+    /// * `Err(ConfirmatorError::NegativeConfirmation)` if `confirmation` is negative.
+    /// * `Ok(true/false)` otherwise:
+    ///   - when `confirmation` is zero: `true` if `condition` is true, `false` otherwise.
+    ///   - `true` if `debounce_counter >= confirmation`, `false` otherwise.
     ///
     /// # Example
     /// ```
     /// # use confirmator::Confirmator;
     /// let mut c = Confirmator::<u32>::new();
     /// // custom step of 2, confirmation of 4
-    /// assert!(!c.step(true, Some(2), 4)); // counter = 2
-    /// assert!( c.step(true, Some(2), 4)); // counter = 4 → confirmed
-    /// assert!(!c.step(false, Some(2), 4)); // reset → counter = 0
+    /// assert!(!c.step(true, 2, 4).unwrap()); // counter = 2
+    /// assert!( c.step(true, 2, 4).unwrap()); // counter = 4 → confirmed
+    /// assert!(!c.step(false, 2, 4).unwrap()); // reset → counter = 0
     /// assert_eq!(c.debounce_counter(), 0);
-    /// assert!(c.step(true, None, 0));
+    /// assert!(c.step(true, 1, 0).unwrap());
     /// ```
-    pub fn step(&mut self, condition: bool, step: Option<T>, confirmation: T) -> bool {
-        let step = step.unwrap_or_else(T::one);
+    pub fn step(
+        &mut self,
+        condition: bool,
+        step: T,
+        confirmation: T,
+    ) -> Result<bool, ConfirmatorError> {
+        if confirmation < T::zero() {
+            return Err(ConfirmatorError::NegativeConfirmation);
+        }
         if T::zero() == confirmation {
-            return condition;
+            return Ok(condition);
         }
         if condition {
             if self.debounce_counter < confirmation {
@@ -102,12 +134,11 @@ impl<T: ConfirmatorValue> Confirmator<T> {
                 if self.debounce_counter >= confirmation {
                     self.debounce_counter = confirmation;
                 }
-            }
-            // do nothing already confirmed
+            } // do nothing already confirmed
         } else {
             self.reset();
         }
-        self.debounce_counter == confirmation
+        Ok(self.debounce_counter == confirmation)
     }
 
     /// Reset internal debounce_counter to zero.
@@ -116,7 +147,7 @@ impl<T: ConfirmatorValue> Confirmator<T> {
     /// ```
     /// # use confirmator::Confirmator;
     /// let mut c = Confirmator::<u32>::new();
-    /// c.step(true, None, 5);
+    /// c.step(true, 1, 5);
     /// assert_ne!(c.debounce_counter(), 0);
     /// c.reset();
     /// assert_eq!(c.debounce_counter(), 0);
@@ -131,17 +162,11 @@ impl<T: ConfirmatorValue> Confirmator<T> {
     /// ```
     /// # use confirmator::Confirmator;
     /// let mut c = Confirmator::<u32>::new();
-    /// c.step(true, Some(3), 10);
+    /// c.step(true, 3, 10);
     /// assert_eq!(c.debounce_counter(), 3);
     /// ```
     pub fn debounce_counter(&self) -> T {
         self.debounce_counter
-    }
-}
-
-impl<T: ConfirmatorValue> Default for Confirmator<T> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -151,8 +176,6 @@ impl<T: ConfirmatorValue> Default for Confirmator<T> {
 
 #[cfg(test)]
 mod tests {
-    use typed_floats::tf32::ZERO;
-
     use super::*;
 
     // ── Confirmator ──────────────────────────
@@ -161,66 +184,130 @@ mod tests {
     fn confirmator_u8_default_step() {
         let mut c: Confirmator<u8> = Confirmator::new();
         for _ in 0..2 {
-            assert!(!c.step(true, None, 3));
+            assert!(!c.step(true, 1, 3).unwrap());
         }
-        assert!( c.step(true, None, 3));
+        assert!(c.step(true, 1, 3).unwrap());
         assert_eq!(c.debounce_counter(), 3);
     }
 
     #[test]
     fn confirmator_u8_resets_on_false() {
         let mut c: Confirmator<u8> = Confirmator::new();
-        assert!(!c.step(true, None, 3));
+        assert!(!c.step(true, 1, 3).unwrap());
         assert_ne!(c.debounce_counter(), 0);
-        c.step(false, None, 3);
+        let _ = c.step(false, 1, 3);
         assert_eq!(c.debounce_counter(), 0);
     }
 
     #[test]
-    fn confirmator_u8_saturate_to_max() {
-        let mut c: Confirmator<u8> = Confirmator::new();
-        assert!(c.step(true, Some(u8::MAX), 3));
+    fn confirmator_f32_default_step() {
+        let mut c: Confirmator<f32> = Confirmator::new();
+        assert!(!c.step(true, 1.0, 3.0).unwrap());
+        assert!(!c.step(true, 1.0, 3.0).unwrap());
+        assert!(c.step(true, 1.0, 3.0).unwrap());
+    }
+
+    #[test]
+    fn confirmator_f32_resets_on_false() {
+        let mut c: Confirmator<f32> = Confirmator::new();
+        let _ = c.step(true, 1.0, 3.0);
+        let _ = c.step(true, 1.0, 3.0);
+        let _ = c.step(false, 1.0, 3.0);
+        assert_eq!(c.debounce_counter(), 0.0);
+        assert!(!c.step(true, 1.0, 3.0).unwrap());
+    }
+
+    #[test]
+    fn confirmator_f32_immediateness() {
+        let mut c: Confirmator<f32> = Confirmator::new();
+        assert!(c.step(true, 1.0, 0.0).unwrap());
+        assert!(!c.step(false, 1.0, 0.0).unwrap());
+    }
+
+    #[test]
+    fn confirmator_f32_saturate_to_max() {
+        let mut c: Confirmator<f32> = Confirmator::new();
+        assert!(c.step(true, f32::MAX, 3.0).unwrap());
+        assert_eq!(c.debounce_counter(), 3.0);
+    }
+
+    #[test]
+    fn confirmator_negative_confirmation() {
+        let mut c: Confirmator<f32> = Confirmator::new();
+        assert_eq!(
+            c.step(true, 1.0, -1.0),
+            Err(ConfirmatorError::NegativeConfirmation)
+        );
+    }
+
+    // ── u16 tests ────────────────────────────
+
+    #[test]
+    fn confirmator_u16_default_step() {
+        let mut c: Confirmator<u16> = Confirmator::new();
+        for _ in 0..2 {
+            assert!(!c.step(true, 1, 3).unwrap());
+        }
+        assert!(c.step(true, 1, 3).unwrap());
         assert_eq!(c.debounce_counter(), 3);
     }
 
     #[test]
-    fn confirmator_u8_immediateness() {
+    fn confirmator_u16_resets_on_false() {
+        let mut c: Confirmator<u16> = Confirmator::new();
+        assert!(!c.step(true, 1, 3).unwrap());
+        assert_ne!(c.debounce_counter(), 0);
+        let _ = c.step(false, 1, 3);
+        assert_eq!(c.debounce_counter(), 0);
+    }
+
+    #[test]
+    fn confirmator_u16_saturate_to_max() {
+        let mut c: Confirmator<u16> = Confirmator::new();
+        assert!(c.step(true, u16::MAX, 3).unwrap());
+        assert_eq!(c.debounce_counter(), 3);
+    }
+
+    #[test]
+    fn confirmator_u16_immediateness() {
+        let mut c: Confirmator<u16> = Confirmator::new();
+        assert!(c.step(true, 1, 0).unwrap());
+        assert!(!c.step(false, 1, 0).unwrap());
+    }
+
+    // ── u32 tests ────────────────────────────
+
+    #[test]
+    fn confirmator_u32_default_step() {
+        let mut c: Confirmator<u32> = Confirmator::new();
+        for _ in 0..2 {
+            assert!(!c.step(true, 1, 3).unwrap());
+        }
+        assert!(c.step(true, 1, 3).unwrap());
+        assert_eq!(c.debounce_counter(), 3);
+    }
+
+    #[test]
+    fn confirmator_u32_resets_on_false() {
+        let mut c: Confirmator<u32> = Confirmator::new();
+        assert!(!c.step(true, 1, 3).unwrap());
+        assert_ne!(c.debounce_counter(), 0);
+        let _ = c.step(false, 1, 3);
+        assert_eq!(c.debounce_counter(), 0);
+    }
+
+    // ── Edge case: already confirmed path ─────
+
+    #[test]
+    fn confirmator_already_confirmed_continues_true() {
         let mut c: Confirmator<u8> = Confirmator::new();
-        assert!( c.step(true, None, 0));
-        assert!(!c.step(false, None, 0));
+        assert!(!c.step(true, 1, 3).unwrap());
+        assert!(!c.step(true, 1, 3).unwrap());
+        assert!(c.step(true, 1, 3).unwrap());
+        assert_eq!(c.debounce_counter(), 3);
+        assert!(c.step(true, 1, 3).unwrap());
+        assert_eq!(c.debounce_counter(), 3);
+        assert!(c.step(true, 1, 3).unwrap());
+        assert_eq!(c.debounce_counter(), 3);
     }
-
-
-    #[test]
-    fn confirmator_tf32_default_step() {
-        let mut c: Confirmator<Positive> = Confirmator::new();
-        assert!(!c.step(true, None, 3.0.try_into().unwrap()));
-        assert!(!c.step(true, None, 3.0.try_into().unwrap()));
-        assert!( c.step(true, None, 3.0.try_into().unwrap())); 
-    }
-
-    #[test]
-    fn confirmator_tf32_resets_on_false() {
-        let mut c: Confirmator<Positive> = Confirmator::new();
-        c.step(true, None, 3.0.try_into().unwrap());
-        c.step(true, None, 3.0.try_into().unwrap());
-        c.step(false, None, 3.0.try_into().unwrap());
-        assert_eq!(c.debounce_counter(), ZERO);
-        assert!(!c.step(true, None, 3.0.try_into().unwrap()));
-    }
-
-    #[test]
-    fn confirmator_tf32_immediateness() {
-        let mut c: Confirmator<Positive> = Confirmator::new();
-        assert!( c.step(true, None, 0.0.try_into().unwrap()));
-        assert!(!c.step(false, None, 0.0.try_into().unwrap()));
-    }
-
-    #[test]
-    fn confirmator_tf32_saturate_to_max() {
-        let mut c: Confirmator<Positive> = Confirmator::new();
-        assert!(c.step(true, Some(f32::MAX.try_into().unwrap()), 3.0.try_into().unwrap()));
-        assert_eq!(c.debounce_counter(), 3.0f32);
-    }
-
 }
