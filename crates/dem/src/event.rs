@@ -2,6 +2,8 @@
 // Event Management
 // ─────────────────────────────────────────────
 
+use std::f32::consts::E;
+
 use crate::UdsStatusByte;
 use chrono::{DateTime, Utc};
 
@@ -202,6 +204,14 @@ pub struct ExtendedRecordList {
     len: usize,
 }
 
+/// Result of finding the lowest priority entry in an [`ExtendedRecordList`].
+pub struct LowestPriorityResult {
+    /// Index of the lowest priority entry.
+    pub index: usize,
+    /// The lowest priority value.
+    pub priority: u8,
+}
+
 impl ExtendedRecordList {
     const CAPACITY: usize = 24;
 
@@ -292,6 +302,32 @@ impl ExtendedRecordList {
             .find(|ext_rec| ext_rec.priority == priority)
     }
 
+    /// Returns a reference to the entry with the given event ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_id` - The event ID to search for.
+    ///
+    /// # Returns
+    ///
+    /// `Some(&ExtendedRecord)` if an entry with the given event ID exists, `None` otherwise.
+    pub fn get_by_event_id(&self, event_id: EventId) -> Option<&ExtendedRecord> {
+        self.iter().find(|ext_rec| ext_rec.event_id == event_id)
+    }
+
+    /// Returns a mutable reference to the entry with the given event ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_id` - The event ID to search for.
+    ///
+    /// # Returns
+    ///
+    /// `Some(&mut ExtendedRecord)` if an entry with the given event ID exists, `None` otherwise.
+    pub fn get_by_event_id_mut(&mut self, event_id: EventId) -> Option<&mut ExtendedRecord> {
+        self.iter_mut().find(|ext_rec| ext_rec.event_id == event_id)
+    }
+
     /// Returns an iterator over all entries in insertion order.
     ///
     /// # Returns
@@ -329,7 +365,7 @@ impl ExtendedRecordList {
 
     /// Inserts a new entry into the list, maintaining priority order.
     ///
-    /// The entry is inserted at the position that maintains ascending priority order.
+    /// If the list is full, replaces the lowest priority entry if the new entry has higher priority.
     ///
     /// # Arguments
     ///
@@ -337,10 +373,17 @@ impl ExtendedRecordList {
     ///
     /// # Returns
     ///
-    /// `Ok(())` if insertion succeeded, `Err(EventManagerError::ListFullError)` if the list is full.
+    /// `Ok(())` if insertion succeeded.
+    /// `Err(EventManagerError::ListFullError)` if the list is full and no entry has lower priority.
     pub fn insert(&mut self, ext_rec: ExtendedRecord) -> Result<(), EventManagerError> {
         if self.is_full() {
-            return Err(EventManagerError::ListFullError);
+            let new_priority = ext_rec.priority;
+            let lowest = self.find_lowest_priority();
+            if new_priority < lowest.priority {
+                self.remove(lowest.index);
+            } else {
+                return Err(EventManagerError::ListFullError);
+            }
         }
 
         let priority = ext_rec.priority;
@@ -357,6 +400,30 @@ impl ExtendedRecordList {
         self.data[pos] = Some(ext_rec);
         self.len += 1;
         Ok(())
+    }
+
+    /// Finds the entry with the lowest priority.
+    ///
+    /// # Returns
+    ///
+    /// A struct containing the index and priority of the lowest priority entry.
+    pub fn find_lowest_priority(&self) -> LowestPriorityResult {
+        let mut lowest_idx = 0;
+        let mut lowest_priority = u8::MAX;
+
+        for i in 0..self.len {
+            if let Some(ext_rec) = &self.data[i] {
+                if ext_rec.priority < lowest_priority {
+                    lowest_priority = ext_rec.priority;
+                    lowest_idx = i;
+                }
+            }
+        }
+
+        LowestPriorityResult {
+            index: lowest_idx,
+            priority: lowest_priority,
+        }
     }
 
     /// Removes and returns the entry at the given index.
@@ -582,6 +649,8 @@ pub struct EventManager {
     events: &'static mut [Event],
     /// Persistent extended record storage.
     extended_records: &'static mut ExtendedRecordList,
+    /// Bit mask for triggering extended record updates on rising edges.
+    extended_record_mask: u8,
 }
 
 impl EventManager {
@@ -591,6 +660,7 @@ impl EventManager {
     ///
     /// * `events` - Static slice of [`Event`] instances.
     /// * `extended_records` - Static reference to [`ExtendedRecordList`].
+    /// * `extended_record_mask` - Bit mask for triggering extended record updates on rising edges.
     ///
     /// # Returns
     ///
@@ -598,10 +668,12 @@ impl EventManager {
     pub fn new(
         events: &'static mut [Event],
         extended_records: &'static mut ExtendedRecordList,
+        extended_record_mask: u8,
     ) -> Self {
         Self {
             events,
             extended_records,
+            extended_record_mask,
         }
     }
 
@@ -631,9 +703,51 @@ impl EventManager {
             return Err(EventManagerError::InvalidEventIdError);
         }
 
-        self.events[event_id as usize]
+        let event = &mut self.events[index];
+        let event_id = event.event_id;
+        let priority = event.cal_config.priority;
+        let old_status = event.uds_status_old;
+        let new_status = event
             .step(condition, active, sampling)
-            .map_err(|_| EventManagerError::EventStepError)
+            .map_err(|_| EventManagerError::EventStepError)?;
+
+        self.store_in_extended_records(event_id, priority, old_status, new_status)?;
+
+        Ok(new_status)
+    }
+
+    /// Stores or updates an extended record when a rising edge is detected on the status bits
+    /// that match `extended_record_mask`.
+    ///
+    /// A rising edge occurs when a status bit transitions from 0 to 1. If the event already
+    /// exists in the extended records list, its `date_at_last_save` is updated. Otherwise,
+    /// a new entry is created with both timestamps set to the current time.
+    fn store_in_extended_records(
+        &mut self,
+        event_id: EventId,
+        priority: u8,
+        old_status: UdsStatusByte,
+        new_status: UdsStatusByte,
+    ) -> Result<(), EventManagerError> {
+        let rising_edge =
+            ((new_status.raw() ^ old_status.raw()) & new_status.raw()) & self.extended_record_mask;
+        let status_triggered = rising_edge != 0;
+
+        if status_triggered {
+            if let Some(existing) = self.extended_records.get_by_event_id_mut(event_id) {
+                existing.date_at_last_save = Some(Utc::now());
+            } else {
+                let ext_rec = ExtendedRecord {
+                    event_id,
+                    priority,
+                    date_at_first_save: Some(Utc::now()),
+                    date_at_last_save: Some(Utc::now()),
+                };
+                self.extended_records.insert(ext_rec)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -661,7 +775,7 @@ impl EventManager {
 pub struct Event {
     event_id: EventId,
     debounce_counter: i16,
-    uds_status_old: UdsStatusByte,
+    pub uds_status_old: UdsStatusByte,
     disabled: bool,
     nv_config: &'static mut NvmConfig,
     cal_config: &'static CalibConfig,
@@ -1561,10 +1675,10 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
         let event = Event::new(0, n_cfg, c_cfg);
-        let mut events = Box::leak(Box::new([event]));
-        let mut ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+        let events = Box::leak(Box::new([event]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
 
-        let mut manager = EventManager::new(events, ext_list);
+        let mut manager = EventManager::new(events, ext_list, UdsStatusByte::TF_BIT);
 
         let result = manager.step(0, Status::PreFailed, true, 0.0);
         assert!(result.is_ok());
@@ -1584,10 +1698,10 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
         let event = Event::new(0, n_cfg, c_cfg);
-        let mut events = Box::leak(Box::new([event]));
-        let mut ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+        let events = Box::leak(Box::new([event]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
 
-        let mut manager = EventManager::new(events, ext_list);
+        let mut manager = EventManager::new(events, ext_list, UdsStatusByte::TF_BIT);
 
         let result = manager.step(99, Status::PreFailed, true, 0.0);
         assert_eq!(result.unwrap_err(), EventManagerError::InvalidEventIdError);
@@ -1607,12 +1721,131 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
         let event = Event::new(0, n_cfg, c_cfg);
-        let mut events = Box::leak(Box::new([event]));
-        let mut ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+        let events = Box::leak(Box::new([event]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
 
-        let mut manager = EventManager::new(events, ext_list);
+        let mut manager = EventManager::new(events, ext_list, UdsStatusByte::TF_BIT);
 
         let result = manager.step(0, Status::PreFailed, true, -1.0);
         assert_eq!(result.unwrap_err(), EventManagerError::EventStepError);
+    }
+
+    #[test]
+    fn event_manager_rising_edge_creates_extended_record() {
+        let c_cfg = create_cal_config(
+            0,
+            0,
+            3,
+            5,
+            DebounceType::TimeBased,
+            DebounceBehavior::Freeze,
+            0,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
+
+        let event = Event::new(42, n_cfg, c_cfg);
+        let events = Box::leak(Box::new([event]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager::new(events, ext_list, UdsStatusByte::TF_BIT);
+
+        manager.step(0, Status::Failed, true, 1.0).unwrap();
+
+        let ext_rec = manager.extended_records.get_by_event_id(42);
+        assert!(ext_rec.is_some());
+        assert_eq!(ext_rec.unwrap().event_id, 42);
+    }
+
+    #[test]
+    fn event_manager_no_rising_edge_no_extended_record() {
+        let c_cfg = create_cal_config(
+            0,
+            0,
+            3,
+            5,
+            DebounceType::TimeBased,
+            DebounceBehavior::Freeze,
+            0,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
+
+        let event = Event::new(42, n_cfg, c_cfg);
+        let events = Box::leak(Box::new([event]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager::new(events, ext_list, UdsStatusByte::TF_BIT);
+
+        manager.step(0, Status::Passed, true, 1.0).unwrap();
+
+        assert!(manager.extended_records.is_empty());
+    }
+
+    #[test]
+    fn event_manager_extended_record_updated_on_reinsert() {
+        let c_cfg = create_cal_config(
+            0,
+            0,
+            3,
+            5,
+            DebounceType::TimeBased,
+            DebounceBehavior::Freeze,
+            0,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
+
+        let event = Event::new(42, n_cfg, c_cfg);
+        let events = Box::leak(Box::new([event]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager::new(events, ext_list, UdsStatusByte::TF_BIT);
+
+        manager.step(0, Status::Failed, true, 1.0).unwrap();
+        let first_rec = manager.extended_records.get_by_event_id(42).unwrap();
+        let first_date = first_rec.date_at_last_save;
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        manager.step(0, Status::Failed, true, 1.0).unwrap();
+        let second_rec = manager.extended_records.get_by_event_id(42).unwrap();
+
+        assert!(second_rec.date_at_last_save > first_date);
+        assert_eq!(second_rec.event_id, 42);
+    }
+
+    #[test]
+    fn event_manager_extended_records_list_full_replaces_lowest_priority() {
+        let mut events_vec: Vec<Event> = Vec::with_capacity(25);
+
+        for i in 0..25u8 {
+            let priority = if i < 24 { 10 + i } else { 0 };
+            let c_cfg = create_cal_config(
+                1,
+                0,
+                3,
+                5,
+                DebounceType::TimeBased,
+                DebounceBehavior::Freeze,
+                priority,
+            );
+            let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
+            events_vec.push(Event::new(i as EventId, n_cfg, c_cfg));
+        }
+
+        let events = Box::leak(events_vec.into_boxed_slice());
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+        let mut manager = EventManager::new(events, ext_list, UdsStatusByte::TF_BIT);
+
+        for i in 0..=24 {
+            let result = manager.step(i as EventId, Status::Failed, true, 1.0);
+            if result.is_err() {
+                panic!("step({}) failed: {:?}", i, result.unwrap_err());
+            }
+        }
+
+        assert!(manager.extended_records.is_full());
+        assert_eq!(manager.extended_records.len(), 24);
+
+        assert!(manager.extended_records.get_by_event_id(0).is_none());
+        assert!(manager.extended_records.get_by_event_id(24).is_some());
     }
 }
