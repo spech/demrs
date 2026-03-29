@@ -171,7 +171,11 @@ pub struct ExtendedRecord {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventManagerError {
     /// The extended records list has reached its maximum capacity.
-    ListFull,
+    ListFullError,
+    /// The provided event ID is out of bounds.
+    InvalidEventIdError,
+    /// The event step operation failed.
+    EventStepError,
 }
 
 // ─────────────────────────────────────────────
@@ -186,7 +190,7 @@ pub enum EventManagerError {
 /// ## Capacity
 ///
 /// The list has a fixed capacity of 24 entries. Attempting to insert
-/// when full returns [`EventManagerError::ListFull`].
+/// when full returns [`EventManagerError::ListFullError`].
 ///
 /// ## Usage
 ///
@@ -333,10 +337,10 @@ impl ExtendedRecordList {
     ///
     /// # Returns
     ///
-    /// `Ok(())` if insertion succeeded, `Err(EventManagerError::ListFull)` if the list is full.
+    /// `Ok(())` if insertion succeeded, `Err(EventManagerError::ListFullError)` if the list is full.
     pub fn insert(&mut self, ext_rec: ExtendedRecord) -> Result<(), EventManagerError> {
         if self.is_full() {
-            return Err(EventManagerError::ListFull);
+            return Err(EventManagerError::ListFullError);
         }
 
         let priority = ext_rec.priority;
@@ -599,6 +603,37 @@ impl EventManager {
             events,
             extended_records,
         }
+    }
+
+    /// Advances the specified event by one step.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_id` - The ID of the event to step.
+    /// * `condition` - The status signal driving the debouncing.
+    /// * `active` - If `false`, skips debouncing and returns previous status.
+    /// * `sampling` - Sampling period (used for time-based debouncing).
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(UdsStatusByte)` with the updated status after processing the step.
+    /// * `Err(EventManagerError::InvalidEventIdError)` if the event ID is out of bounds.
+    /// * `Err(EventManagerError::EventStepError)` if the event step operation failed.
+    pub fn step(
+        &mut self,
+        event_id: EventId,
+        condition: Status,
+        active: bool,
+        sampling: f32,
+    ) -> Result<UdsStatusByte, EventManagerError> {
+        let index = event_id as usize;
+        if index >= self.events.len() {
+            return Err(EventManagerError::InvalidEventIdError);
+        }
+
+        self.events[event_id as usize]
+            .step(condition, active, sampling)
+            .map_err(|_| EventManagerError::EventStepError)
     }
 }
 
@@ -1506,5 +1541,78 @@ mod tests {
         assert!(evt.status().cdtc());
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), 0);
+    }
+
+    // ────────────────────────────────────────────
+    // EventManager Tests
+    // ────────────────────────────────────────────
+
+    #[test]
+    fn event_manager_step_success() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
+
+        let event = Event::new(0, n_cfg, c_cfg);
+        let mut events = Box::leak(Box::new([event]));
+        let mut ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager::new(events, ext_list);
+
+        let result = manager.step(0, Status::PreFailed, true, 0.0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn event_manager_step_invalid_id() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
+
+        let event = Event::new(0, n_cfg, c_cfg);
+        let mut events = Box::leak(Box::new([event]));
+        let mut ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager::new(events, ext_list);
+
+        let result = manager.step(99, Status::PreFailed, true, 0.0);
+        assert_eq!(result.unwrap_err(), EventManagerError::InvalidEventIdError);
+    }
+
+    #[test]
+    fn event_manager_step_event_error() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::TimeBased,
+            DebounceBehavior::Freeze,
+            0,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
+
+        let event = Event::new(0, n_cfg, c_cfg);
+        let mut events = Box::leak(Box::new([event]));
+        let mut ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager::new(events, ext_list);
+
+        let result = manager.step(0, Status::PreFailed, true, -1.0);
+        assert_eq!(result.unwrap_err(), EventManagerError::EventStepError);
     }
 }
