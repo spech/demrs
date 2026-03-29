@@ -228,10 +228,6 @@ impl ExtendedRecordList {
     }
 
     /// Returns the number of entries in the list.
-    ///
-    /// # Returns
-    ///
-    /// The current number of entries.
     pub fn len(&self) -> usize {
         self.len
     }
@@ -252,54 +248,6 @@ impl ExtendedRecordList {
     /// `true` if the list is full (24 entries).
     pub fn is_full(&self) -> bool {
         self.len == Self::CAPACITY
-    }
-
-    /// Returns a reference to the entry at the given index.
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - The index of the entry to retrieve.
-    ///
-    /// # Returns
-    ///
-    /// `Some(&ExtendedRecord)` if the index is valid, `None` otherwise.
-    pub fn get(&self, index: usize) -> Option<&ExtendedRecord> {
-        if index < self.len {
-            self.data[index].as_ref()
-        } else {
-            None
-        }
-    }
-
-    /// Returns a mutable reference to the entry at the given index.
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - The index of the entry to retrieve.
-    ///
-    /// # Returns
-    ///
-    /// `Some(&mut ExtendedRecord)` if the index is valid, `None` otherwise.
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut ExtendedRecord> {
-        if index < self.len {
-            self.data[index].as_mut()
-        } else {
-            None
-        }
-    }
-
-    /// Returns a reference to the entry with the given priority.
-    ///
-    /// # Arguments
-    ///
-    /// * `priority` - The priority value to search for.
-    ///
-    /// # Returns
-    ///
-    /// `Some(&ExtendedRecord)` if an entry with the given priority exists, `None` otherwise.
-    pub fn get_by_priority(&self, priority: u8) -> Option<&ExtendedRecord> {
-        self.iter_by_priority()
-            .find(|ext_rec| ext_rec.priority == priority)
     }
 
     /// Returns a reference to the entry with the given event ID.
@@ -350,17 +298,6 @@ impl ExtendedRecordList {
             .iter_mut()
             .take(self.len)
             .filter_map(|opt| opt.as_mut())
-    }
-
-    /// Returns an iterator over all entries sorted by priority (ascending).
-    ///
-    /// # Returns
-    ///
-    /// An iterator yielding references to entries sorted by priority.
-    pub fn iter_by_priority(&self) -> impl Iterator<Item = &ExtendedRecord> {
-        let mut items: Vec<&ExtendedRecord> = self.iter().collect();
-        items.sort_by_key(|ext_rec| ext_rec.priority);
-        items.into_iter()
     }
 
     /// Inserts a new entry into the list, maintaining priority order.
@@ -471,157 +408,6 @@ impl ExtendedRecordList {
         } else {
             None
         }
-    }
-
-    /// Removes all entries from the list.
-    pub fn clear(&mut self) {
-        for i in 0..self.len {
-            self.data[i] = None;
-        }
-        self.len = 0;
-    }
-
-    /// Removes and returns the entry with the highest priority.
-    ///
-    /// # Returns
-    ///
-    /// `Some(ExtendedRecord)` if the list is not empty, `None` otherwise.
-    pub fn pop_highest(&mut self) -> Option<ExtendedRecord> {
-        if self.len == 0 {
-            return None;
-        }
-
-        let max_priority = self.data[..self.len]
-            .iter()
-            .filter_map(|opt| opt.as_ref())
-            .map(|e| e.priority)
-            .max()?;
-
-        self.remove_by_priority(max_priority)
-    }
-
-    /// Removes and returns the entry with the lowest priority.
-    ///
-    /// # Returns
-    ///
-    /// `Some(ExtendedRecord)` if the list is not empty, `None` otherwise.
-    pub fn pop_lowest(&mut self) -> Option<ExtendedRecord> {
-        if self.len == 0 {
-            return None;
-        }
-
-        let min_priority = self.data[..self.len]
-            .iter()
-            .filter_map(|opt| opt.as_ref())
-            .map(|e| e.priority)
-            .min()?;
-
-        self.remove_by_priority(min_priority)
-    }
-
-    /// Returns all entries with priority within the inclusive range `[from, to]`.
-    ///
-    /// # Arguments
-    ///
-    /// * `from` - Lower bound of the priority range (inclusive).
-    /// * `to` - Upper bound of the priority range (inclusive).
-    ///
-    /// # Returns
-    ///
-    /// A vector of references to entries within the specified priority range.
-    pub fn range(&self, from: u8, to: u8) -> Vec<&ExtendedRecord> {
-        self.iter_by_priority()
-            .filter(|ext_rec| ext_rec.priority >= from && ext_rec.priority <= to)
-            .collect()
-    }
-
-    /// Removes and returns all entries with priority greater than the given value.
-    ///
-    /// # Arguments
-    ///
-    /// * `priority` - Entries with priority > this value are removed.
-    ///
-    /// # Returns
-    ///
-    /// A vector containing all removed entries, in ascending priority order.
-    pub fn drain_above(&mut self, priority: u8) -> Vec<ExtendedRecord> {
-        let mut drained = Vec::new();
-
-        let indices: Vec<usize> = self.data[..self.len]
-            .iter()
-            .enumerate()
-            .filter(|(_, opt)| opt.as_ref().map(|e| e.priority > priority).unwrap_or(false))
-            .map(|(i, _)| i)
-            .collect();
-
-        for idx in indices.into_iter().rev() {
-            if let Some(ext_rec) = self.remove(idx) {
-                drained.push(ext_rec);
-            }
-        }
-
-        drained.into_iter().rev().collect()
-    }
-
-    /// Removes and returns all entries with priority less than the given value.
-    ///
-    /// # Arguments
-    ///
-    /// * `priority` - Entries with priority < this value are removed.
-    ///
-    /// # Returns
-    ///
-    /// A vector containing all removed entries, in ascending priority order.
-    pub fn drain_below(&mut self, priority: u8) -> Vec<ExtendedRecord> {
-        let mut drained = Vec::new();
-
-        let indices: Vec<usize> = self.data[..self.len]
-            .iter()
-            .enumerate()
-            .filter(|(_, opt)| opt.as_ref().map(|e| e.priority < priority).unwrap_or(false))
-            .map(|(i, _)| i)
-            .collect();
-
-        for idx in indices.into_iter().rev() {
-            if let Some(ext_rec) = self.remove(idx) {
-                drained.push(ext_rec);
-            }
-        }
-
-        drained.into_iter().rev().collect()
-    }
-
-    /// Removes and returns all entries with priority within the inclusive range `[from, to]`.
-    ///
-    /// # Arguments
-    ///
-    /// * `from` - Lower bound of the priority range (inclusive).
-    /// * `to` - Upper bound of the priority range (inclusive).
-    ///
-    /// # Returns
-    ///
-    /// A vector containing all removed entries, in ascending priority order.
-    pub fn drain_range(&mut self, from: u8, to: u8) -> Vec<ExtendedRecord> {
-        let mut drained = Vec::new();
-
-        let indices: Vec<usize> = self.data[..self.len]
-            .iter()
-            .enumerate()
-            .filter(|(_, opt)| {
-                opt.as_ref()
-                    .map(|e| e.priority >= from && e.priority <= to)
-                    .unwrap_or(false)
-            })
-            .map(|(i, _)| i)
-            .collect();
-
-        for idx in indices.into_iter().rev() {
-            if let Some(ext_rec) = self.remove(idx) {
-                drained.push(ext_rec);
-            }
-        }
-
-        drained.into_iter().rev().collect()
     }
 }
 
@@ -1847,5 +1633,130 @@ mod tests {
 
         assert!(manager.extended_records.get_by_event_id(0).is_none());
         assert!(manager.extended_records.get_by_event_id(24).is_some());
+    }
+
+    #[test]
+    fn extended_record_list_insert_full_returns_error() {
+        let mut list = ExtendedRecordList::new();
+
+        for i in 0..24 {
+            let ext_rec = ExtendedRecord {
+                event_id: i,
+                priority: 10 + i as u8,
+                date_at_first_save: None,
+                date_at_last_save: None,
+            };
+            list.insert(ext_rec).unwrap();
+        }
+
+        assert!(list.is_full());
+        assert_eq!(list.len(), 24);
+
+        let ext_rec = ExtendedRecord {
+            event_id: 99,
+            priority: 100,
+            date_at_first_save: None,
+            date_at_last_save: None,
+        };
+        let result = list.insert(ext_rec);
+        assert_eq!(result.unwrap_err(), EventManagerError::ListFullError);
+
+        assert_eq!(list.len(), 24);
+        assert!(list.get_by_event_id(0).is_some());
+        assert!(list.get_by_event_id(23).is_some());
+        assert!(list.get_by_event_id(99).is_none());
+    }
+
+    #[test]
+    fn extended_record_list_remove_out_of_bounds_returns_none() {
+        let mut list = ExtendedRecordList::new();
+
+        let result = list.remove(0);
+        assert!(result.is_none());
+
+        let ext_rec = ExtendedRecord {
+            event_id: 1,
+            priority: 5,
+            date_at_first_save: None,
+            date_at_last_save: None,
+        };
+        list.insert(ext_rec).unwrap();
+
+        let result = list.remove(5);
+        assert!(result.is_none());
+
+        let result = list.remove(100);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extended_record_list_remove_by_priority() {
+        let mut list = ExtendedRecordList::new();
+
+        let ext_rec1 = ExtendedRecord {
+            event_id: 1,
+            priority: 5,
+            date_at_first_save: None,
+            date_at_last_save: None,
+        };
+        let ext_rec2 = ExtendedRecord {
+            event_id: 2,
+            priority: 10,
+            date_at_first_save: None,
+            date_at_last_save: None,
+        };
+        let ext_rec3 = ExtendedRecord {
+            event_id: 3,
+            priority: 15,
+            date_at_first_save: None,
+            date_at_last_save: None,
+        };
+        list.insert(ext_rec1).unwrap();
+        list.insert(ext_rec2).unwrap();
+        list.insert(ext_rec3).unwrap();
+
+        assert_eq!(list.len(), 3);
+
+        let removed = list.remove_by_priority(10).unwrap();
+        assert_eq!(removed.event_id, 2);
+        assert_eq!(list.len(), 2);
+        assert!(list.get_by_event_id(2).is_none());
+        assert!(list.get_by_event_id(1).is_some());
+        assert!(list.get_by_event_id(3).is_some());
+
+        let result = list.remove_by_priority(200);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extended_record_list_find_lowest_priority() {
+        let mut list = ExtendedRecordList::new();
+
+        let ext_rec1 = ExtendedRecord {
+            event_id: 1,
+            priority: 10,
+            date_at_first_save: None,
+            date_at_last_save: None,
+        };
+        let ext_rec2 = ExtendedRecord {
+            event_id: 2,
+            priority: 5,
+            date_at_first_save: None,
+            date_at_last_save: None,
+        };
+        let ext_rec3 = ExtendedRecord {
+            event_id: 3,
+            priority: 15,
+            date_at_first_save: None,
+            date_at_last_save: None,
+        };
+        list.insert(ext_rec1).unwrap();
+        list.insert(ext_rec2).unwrap();
+        list.insert(ext_rec3).unwrap();
+
+        let result = list.find_lowest_priority();
+        assert_eq!(result.priority, 5);
+        assert_eq!(result.index, 0);
+        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 2);
     }
 }
