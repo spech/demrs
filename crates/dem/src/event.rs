@@ -2,8 +2,6 @@
 // Event Management
 // ─────────────────────────────────────────────
 
-use std::f32::consts::E;
-
 use crate::extended_record::{
     EventId, EventManagerError, ExtendedRecord, ExtendedRecordList, LowestPriorityResult,
 };
