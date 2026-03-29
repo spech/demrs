@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────
 
 use crate::UdsStatusByte;
+use chrono::{DateTime, Utc};
 
 /// # Event Module
 ///
@@ -87,8 +88,8 @@ pub enum EventError {
 
 /// Calibration configuration for [`Event`].
 ///
-/// This struct holds step counts, debounce behavior, type,
-/// and priority, allowing a single configuration to be shared across multiple events.
+/// This struct holds step counts, debounce behavior, and type,
+/// allowing a single configuration to be shared across multiple events.
 #[derive(Clone)]
 pub struct CalibConfig {
     /// Number of `PreFailed` ticks to reach `i16::MAX`.
@@ -134,6 +135,25 @@ pub struct NvmConfig {
 }
 
 // ─────────────────────────────────────────────
+// ExtendedRecord
+// ─────────────────────────────────────────────
+
+pub type EventId = u16;
+
+pub struct ExtendedRecord {
+    pub event_id: EventId,
+    pub priority: u8,
+    pub date_at_first_save: Option<DateTime<Utc>>,
+    pub date_at_last_save: Option<DateTime<Utc>>,
+}
+
+impl ordered_list::HasPriority for ExtendedRecord {
+    fn priority(&self) -> u8 {
+        self.priority
+    }
+}
+
+// ─────────────────────────────────────────────
 // Event
 // ─────────────────────────────────────────────
 
@@ -153,33 +173,40 @@ pub struct NvmConfig {
 ///
 /// ## Usage
 ///
-/// Create an `Event` with [`CalibConfig`] and [`NvmConfig`], then call [`step`] with status signals.
-pub struct Event {
+/// Create an `Event` with [`CalibConfig`], [`NvmConfig`], and [`ExtendedRecord`], then call [`step`] with status signals.
+pub struct Event<'a> {
     debounce_counter: i16,
     uds_status_old: UdsStatusByte,
     disabled: bool,
     nv_config: NvmConfig,
     cal_config: CalibConfig,
+    extended_record: &'a ExtendedRecord,
 }
 
-impl Event {
+impl<'a> Event<'a> {
     /// Creates a new `Event` with the given configurations.
     ///
     /// # Arguments
     ///
     /// * `nv_config` - Non-volatile config holding persistent state.
     /// * `cal_config` - Calibration config with step counts and behavior.
+    /// * `extended_record` - Extended record with event metadata.
     ///
     /// # Returns
     ///
     /// A new `Event` instance, initialized with counter at 0 and status copied.
-    pub fn new(nv_config: NvmConfig, cal_config: CalibConfig) -> Self {
+    pub fn new(
+        nv_config: NvmConfig,
+        cal_config: CalibConfig,
+        extended_record: &'a ExtendedRecord,
+    ) -> Self {
         Self {
             debounce_counter: 0i16,
             uds_status_old: nv_config.uds_status,
             disabled: false,
             nv_config,
             cal_config,
+            extended_record,
         }
     }
 
@@ -365,9 +392,8 @@ mod tests {
         confirmation_thr: u8,
         aging_thr: u8,
         debounce_type: DebounceType,
-        priority: u8,
         debounce_behavior: DebounceBehavior,
-    ) -> (CalibConfig, i16, i16, u8, u8, u8) {
+    ) -> (CalibConfig, i16, i16, u8, u8) {
         let cfg = CalibConfig {
             step_up,
             step_down,
@@ -375,17 +401,19 @@ mod tests {
             debounce_type,
             confirmation_threshold: confirmation_thr,
             aging_threshold: aging_thr,
-            priority,
+            priority: 0,
         };
 
-        (
-            cfg,
-            step_up,
-            step_down,
-            confirmation_thr,
-            aging_thr,
+        (cfg, step_up, step_down, confirmation_thr, aging_thr)
+    }
+
+    fn create_extended_record(event_id: EventId, priority: u8) -> ExtendedRecord {
+        ExtendedRecord {
+            event_id,
             priority,
-        )
+            date_at_first_save: None,
+            date_at_last_save: None,
+        }
     }
 
     fn create_nvm_config(
@@ -415,13 +443,12 @@ mod tests {
 
     #[test]
     fn calib_config_fields_accessible() {
-        let (cfg, _, _, expected_conf, expected_aging, _) = create_cal_config(
+        let (cfg, _, _, expected_conf, expected_aging) = create_cal_config(
             2,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         assert_eq!(cfg.confirmation_threshold, expected_conf);
@@ -439,36 +466,37 @@ mod tests {
 
     #[test]
     fn event_cal_config_accessible() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             4,
             6,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let evt = Event::new(n_cfg, c_cfg, &ext_rec);
         assert_eq!(evt.cal_config.confirmation_threshold, 4u8);
         assert_eq!(evt.cal_config.aging_threshold, 6u8);
     }
 
     #[test]
     fn event_priority_returns_config_value() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (mut c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            42,
             DebounceBehavior::Freeze,
         );
+        c_cfg.priority = 42;
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
+        let ext_rec = create_extended_record(0, 0);
 
-        let evt = Event::new(n_cfg, c_cfg);
+        let evt = Event::new(n_cfg, c_cfg, &ext_rec);
         assert_eq!(evt.priority(), 42);
     }
 
@@ -478,18 +506,18 @@ mod tests {
 
     #[test]
     fn prefailed_increments_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         assert!(evt.status().tf());
@@ -497,18 +525,18 @@ mod tests {
 
     #[test]
     fn prepassed_decrements_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             0,
             1,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::PrePassed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MIN);
@@ -517,18 +545,18 @@ mod tests {
 
     #[test]
     fn failed_status_immediate_confirmation() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             2,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         assert!(evt.status().tf());
@@ -536,18 +564,18 @@ mod tests {
 
     #[test]
     fn prefailed_no_debounce_when_step_up_zero() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             0,
             1,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), 0);
         assert!(!evt.status().tf());
@@ -555,18 +583,18 @@ mod tests {
 
     #[test]
     fn prefailed_accumulates_and_snaps() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             2,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::Passed, true, 0.0).unwrap();
         assert!(!evt.status().tf());
@@ -583,18 +611,18 @@ mod tests {
 
     #[test]
     fn prepassed_no_debounce_when_step_down_zero() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
 
@@ -605,18 +633,18 @@ mod tests {
 
     #[test]
     fn passed_status_immediate_clear() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             0,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
         evt.step(Status::Passed, true, 0.0).unwrap();
@@ -626,18 +654,18 @@ mod tests {
 
     #[test]
     fn counter_saturates_at_max() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
@@ -646,18 +674,18 @@ mod tests {
 
     #[test]
     fn counter_saturates_at_min() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             0,
             1,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::PrePassed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MIN);
@@ -667,18 +695,18 @@ mod tests {
 
     #[test]
     fn disabled_event_freezes_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         let counter_val = evt.debounce_counter();
         evt.disable(true);
@@ -688,18 +716,18 @@ mod tests {
 
     #[test]
     fn disabled_event_resets_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Reset,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert!(evt.debounce_counter() > 0);
         evt.disable(true);
@@ -709,18 +737,18 @@ mod tests {
 
     #[test]
     fn clear_resets_debounce_state() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert!(evt.status().tf());
         evt.clear();
@@ -730,18 +758,18 @@ mod tests {
 
     #[test]
     fn prepassed_accumulates_and_snaps() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             0,
             2,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
 
@@ -760,13 +788,12 @@ mod tests {
 
     #[test]
     fn calib_config_thresholds_set_correctly() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         // This test verifies that thresholds are set correctly
@@ -780,18 +807,18 @@ mod tests {
 
     #[test]
     fn timebased_prefailed_with_sampling_period() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             100,
             0,
             3,
             5,
             DebounceType::TimeBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         // With sampling_period=10ms, should reduce effective step_up
         evt.step(Status::PreFailed, true, 10.0).unwrap();
         assert!(evt.debounce_counter() > 0);
@@ -800,18 +827,18 @@ mod tests {
 
     #[test]
     fn timebased_prefailed_accumulates_with_multiple_steps() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             100,
             0,
             3,
             5,
             DebounceType::TimeBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         let counter_after_first = {
             evt.step(Status::PreFailed, true, 10.0).unwrap();
             evt.debounce_counter()
@@ -826,18 +853,18 @@ mod tests {
 
     #[test]
     fn timebased_prepassed_with_sampling_period() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             0,
             100,
             3,
             5,
             DebounceType::TimeBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.step(Status::Failed, true, 10.0).unwrap();
         assert!(evt.status().tf());
 
@@ -849,23 +876,24 @@ mod tests {
 
     #[test]
     fn timebased_sampling_period_affects_counter() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1000,
             0,
             3,
             5,
             DebounceType::TimeBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg1 = create_nvm_config(0, 0, 0, false, true, false);
         let n_cfg2 = create_nvm_config(0, 0, 0, false, true, false);
+        let ext_rec1 = create_extended_record(0, 0);
+        let ext_rec2 = create_extended_record(0, 0);
 
-        let mut evt1 = Event::new(n_cfg1, c_cfg.clone());
+        let mut evt1 = Event::new(n_cfg1, c_cfg.clone(), &ext_rec1);
         evt1.step(Status::PreFailed, true, 10.0).unwrap();
         let counter_10ms = evt1.debounce_counter();
 
-        let mut evt2 = Event::new(n_cfg2, c_cfg);
+        let mut evt2 = Event::new(n_cfg2, c_cfg, &ext_rec2);
         evt2.step(Status::PreFailed, true, 100.0).unwrap();
         let counter_100ms = evt2.debounce_counter();
 
@@ -876,18 +904,18 @@ mod tests {
 
     #[test]
     fn timebased_negative_sampling_error() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             100,
             0,
             3,
             5,
             DebounceType::TimeBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         assert_eq!(
             evt.step(Status::PreFailed, true, -1.0),
             Err(EventError::NegativeSampling)
@@ -896,18 +924,18 @@ mod tests {
 
     #[test]
     fn timebased_zero_sampling_error() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             100,
             0,
             3,
             5,
             DebounceType::TimeBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         assert_eq!(
             evt.step(Status::PreFailed, true, 0.0),
             Err(EventError::ZeroSampling)
@@ -920,19 +948,19 @@ mod tests {
 
     #[test]
     fn stop_not_failed_aging_sets_pdtc_false() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, false, true);
 
         let status = {
-            let mut evt = Event::new(n_cfg, c_cfg);
+            let ext_rec = create_extended_record(0, 0);
+            let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(evt.status().cdtc());
@@ -946,19 +974,19 @@ mod tests {
 
     #[test]
     fn stop_not_failed_aging_completes_clears_cdtc() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 4, 0, false, false, true);
 
         let status = {
-            let mut evt = Event::new(n_cfg, c_cfg);
+            let ext_rec = create_extended_record(0, 0);
+            let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(evt.status().cdtc());
@@ -972,19 +1000,19 @@ mod tests {
 
     #[test]
     fn stop_not_failed_no_cdtc() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, false, false);
 
         let status = {
-            let mut evt = Event::new(n_cfg, c_cfg);
+            let ext_rec = create_extended_record(0, 0);
+            let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(!evt.status().cdtc());
@@ -998,19 +1026,19 @@ mod tests {
 
     #[test]
     fn stop_failed_sets_cdtc() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 2, true, false, false);
 
         let status = {
-            let mut evt = Event::new(n_cfg, c_cfg);
+            let ext_rec = create_extended_record(0, 0);
+            let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
             assert!(evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(!evt.status().cdtc());
@@ -1023,18 +1051,18 @@ mod tests {
 
     #[test]
     fn stop_disables_event() {
-        let (c_cfg, _, _, _, _, _) = create_cal_config(
+        let (c_cfg, _, _, _, _) = create_cal_config(
             1,
             0,
             3,
             5,
             DebounceType::CounterBased,
-            0,
             DebounceBehavior::Freeze,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, false, true);
 
-        let mut evt = Event::new(n_cfg, c_cfg);
+        let ext_rec = create_extended_record(0, 0);
+        let mut evt = Event::new(n_cfg, c_cfg, &ext_rec);
         evt.stop();
         assert!(evt.status().cdtc());
         evt.step(Status::PreFailed, true, 0.0).unwrap();
