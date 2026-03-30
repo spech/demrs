@@ -174,10 +174,12 @@ pub struct EventManager {
 }
 
 impl EventManager {
+    /// Clears all extended records by resetting to an empty list.
     pub fn clear_extended_records(&mut self) {
         *self.extended_records = ExtendedRecordList::new();
     }
 
+    /// Advances the specified event by one step.
     pub fn step(
         &mut self,
         event_id: EventId,
@@ -266,23 +268,21 @@ impl EventManager {
 ///
 /// Create an `Event` with [`CalibConfig`] and [`NvmConfig`], then call [`step`] with status signals.
 pub struct Event {
+    /// Unique identifier for this event.
     pub(crate) event_id: EventId,
+    /// Accumulated debounce counter, positive toward Failed, negative toward Passed.
     pub(crate) debounce_counter: i16,
+    /// Previous UDS status byte for detecting rising edges.
     pub(crate) uds_status_old: UdsStatusByte,
+    /// Whether debouncing is disabled.
     pub(crate) disabled: bool,
+    /// Reference to non-volatile configuration.
     pub(crate) nv_config: &'static mut NvmConfig,
+    /// Reference to calibration configuration.
     pub(crate) cal_config: &'static CalibConfig,
 }
 
 impl Event {
-    /// Creates a new `Event` with the given configurations.
-    ///
-    /// # Arguments
-    ///
-    /// * `event_id` - Unique identifier for this event.
-    /// * `nv_config` - Non-volatile config holding persistent state.
-    /// * `cal_config` - Calibration config with step counts and behavior.
-    ///
     /// Enables or disables the event debouncing.
     ///
     /// # Arguments
@@ -550,13 +550,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         assert_eq!(evt.cal_config.confirmation_threshold, 4u8);
         assert_eq!(evt.cal_config.aging_threshold, 6u8);
     }
@@ -576,13 +576,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         assert_eq!(evt.priority(), 42);
     }
 
@@ -605,13 +605,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         assert!(evt.status().tf());
@@ -632,13 +632,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::PrePassed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MIN);
@@ -660,13 +660,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         assert!(evt.status().tf());
@@ -687,13 +687,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 2, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.nv_config.uds_status.set_tf(true);
 
         evt.step(Status::Failed, true, 0.0).unwrap();
@@ -718,13 +718,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), 0);
         assert!(!evt.status().tf());
@@ -745,13 +745,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::Passed, true, 0.0).unwrap();
         assert!(!evt.status().tf());
@@ -781,13 +781,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
 
@@ -811,13 +811,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
         evt.step(Status::Passed, true, 0.0).unwrap();
@@ -840,13 +840,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MAX);
         evt.step(Status::PreFailed, true, 0.0).unwrap();
@@ -868,13 +868,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::Failed, true, 0.0).unwrap();
         evt.step(Status::PrePassed, true, 0.0).unwrap();
         assert_eq!(evt.debounce_counter(), i16::MIN);
@@ -897,13 +897,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         let counter_val = evt.debounce_counter();
         evt.disable(true);
@@ -926,13 +926,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert!(evt.debounce_counter() > 0);
         evt.disable(true);
@@ -955,13 +955,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::PreFailed, true, 0.0).unwrap();
         assert!(evt.status().tf());
         evt.clear();
@@ -984,13 +984,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::Failed, true, 0.0).unwrap();
         assert!(evt.status().tf());
 
@@ -1043,13 +1043,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         // With sampling_period=10ms, should reduce effective step_up
         evt.step(Status::PreFailed, true, 10.0).unwrap();
         assert!(evt.debounce_counter() > 0);
@@ -1071,13 +1071,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         let counter_after_first = {
             evt.step(Status::PreFailed, true, 10.0).unwrap();
             evt.debounce_counter()
@@ -1105,13 +1105,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.step(Status::Failed, true, 10.0).unwrap();
         assert!(evt.status().tf());
 
@@ -1137,24 +1137,24 @@ mod tests {
         let n_cfg2 = create_nvm_config(0, 0, 0, false, true, false);
 
         let mut evt1 = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg1.uds_status,
-        disabled: false,
-        nv_config: n_cfg1,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg1.uds_status,
+            disabled: false,
+            nv_config: n_cfg1,
+            cal_config: c_cfg,
+        };
         evt1.step(Status::PreFailed, true, 10.0).unwrap();
         let counter_10ms = evt1.debounce_counter();
 
         let mut evt2 = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg2.uds_status,
-        disabled: false,
-        nv_config: n_cfg2,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg2.uds_status,
+            disabled: false,
+            nv_config: n_cfg2,
+            cal_config: c_cfg,
+        };
         evt2.step(Status::PreFailed, true, 100.0).unwrap();
         let counter_100ms = evt2.debounce_counter();
 
@@ -1178,13 +1178,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         assert_eq!(
             evt.step(Status::PreFailed, true, -1.0),
             Err(EventError::NegativeSampling)
@@ -1206,13 +1206,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         assert_eq!(
             evt.step(Status::PreFailed, true, 0.0),
             Err(EventError::ZeroSampling)
@@ -1239,13 +1239,13 @@ mod tests {
 
         let status = {
             let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+                event_id: 0,
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            };
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(evt.status().cdtc());
@@ -1273,13 +1273,13 @@ mod tests {
 
         let status = {
             let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+                event_id: 0,
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            };
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(evt.status().cdtc());
@@ -1307,13 +1307,13 @@ mod tests {
 
         let status = {
             let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+                event_id: 0,
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            };
             assert!(!evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(!evt.status().cdtc());
@@ -1341,13 +1341,13 @@ mod tests {
 
         let status = {
             let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+                event_id: 0,
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            };
             assert!(evt.status().tftoc());
             assert!(!evt.status().tnctoc());
             assert!(!evt.status().cdtc());
@@ -1373,13 +1373,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 0, false, false, true);
 
         let mut evt = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         evt.stop();
         assert!(evt.status().cdtc());
         evt.step(Status::PreFailed, true, 0.0).unwrap();
@@ -1405,13 +1405,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         let events = Box::leak(Box::new([event]));
         let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
 
@@ -1439,13 +1439,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         let events = Box::leak(Box::new([event]));
         let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
 
@@ -1473,13 +1473,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-        event_id: 0,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 0,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         let events = Box::leak(Box::new([event]));
         let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
 
@@ -1507,13 +1507,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-        event_id: 42,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 42,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         let events = Box::leak(Box::new([event]));
         let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
 
@@ -1544,13 +1544,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-        event_id: 42,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 42,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         let events = Box::leak(Box::new([event]));
         let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
 
@@ -1579,13 +1579,13 @@ mod tests {
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-        event_id: 42,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    };
+            event_id: 42,
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
         let events = Box::leak(Box::new([event]));
         let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
 
@@ -1623,13 +1623,13 @@ mod tests {
             );
             let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
             events_vec.push(Event {
-        event_id: i as EventId,
-        debounce_counter: 0,
-        uds_status_old: n_cfg.uds_status,
-        disabled: false,
-        nv_config: n_cfg,
-        cal_config: c_cfg,
-    });
+                event_id: i as EventId,
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            });
         }
 
         let events = Box::leak(events_vec.into_boxed_slice());
