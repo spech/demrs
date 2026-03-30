@@ -188,6 +188,15 @@ impl EventManager {
         }
     }
 
+    /// Stops all managed events at shutdown.
+    ///
+    /// Calls [`Event::stop()`] on each event to update cycle counters and disable them.
+    pub fn stop(&mut self) {
+        for event in self.events.iter_mut() {
+            event.stop();
+        }
+    }
+
     /// Advances the specified event by one step.
     pub fn step(
         &mut self,
@@ -296,30 +305,34 @@ impl Event {
     ///
     /// Resets `tf` (test failed) to false and sets `tnctoc` (test not complete this operating cycle) to true.
     pub fn init(&mut self) {
-        self.nv_config.uds_status.set_tf(false);
-        self.nv_config.uds_status.set_tnctoc(true);
+        self.nv_config.uds_status.clear();
+        self.uds_status_old.clear();
+        self.reset_counter();
     }
 
     /// Stops the event, typically at shutdown.
     ///
     /// Updates cycle counters based on current status and disables the event.
     pub fn stop(&mut self) {
-        if !self.nv_config.uds_status.tftoc() && !self.nv_config.uds_status.tnctoc() {
-            self.nv_config.uds_status.set_pdtc(false);
-            if self.nv_config.uds_status.cdtc() {
-                self.nv_config.aging_cycles = self.nv_config.aging_cycles.saturating_add(1u8);
-                if self.nv_config.aging_cycles == self.cal_config.aging_threshold {
-                    self.nv_config.uds_status.set_cdtc(false);
-                    self.nv_config.confirmation_cycles = 0u8;
+        if !self.nv_config.uds_status.tftoc() {
+            if !self.nv_config.uds_status.tnctoc() {
+                self.nv_config.uds_status.set_pdtc(false);
+                if self.nv_config.uds_status.cdtc() {
+                    if self.nv_config.aging_cycles == self.cal_config.aging_threshold {
+                        self.nv_config.uds_status.set_cdtc(false);
+                        self.nv_config.confirmation_cycles = 0u8;
+                    } else {
+                        self.nv_config.aging_cycles =
+                            self.nv_config.aging_cycles.saturating_add(1u8);
+                    }
                 }
             }
-        }
-        if self.nv_config.uds_status.tftoc() {
-            self.nv_config.confirmation_cycles =
-                self.nv_config.confirmation_cycles.saturating_add(1u8);
-            if self.nv_config.confirmation_cycles == self.cal_config.confirmation_threshold {
-                self.nv_config.uds_status.set_cdtc(true);
-                self.nv_config.aging_cycles = 0u8;
+        } else {
+            if !self.nv_config.uds_status.cdtc() {
+                if self.nv_config.confirmation_cycles < self.cal_config.confirmation_threshold {
+                    self.nv_config.confirmation_cycles =
+                        self.nv_config.confirmation_cycles.saturating_add(1u8);
+                }
             }
         }
         self.disabled = true;
@@ -330,12 +343,10 @@ impl Event {
     /// Resets `debounce_counter` to zero, sets `tf` to `false`, `tnctoc` and `tncslc` to `true`,
     /// clears `tfslc`, and resets occurrence counters. Preserves `tftoc`.
     pub fn clear(&mut self) {
-        self.reset_counter();
+        self.init();
         self.nv_config.occurence_cntr = 0u8;
         self.nv_config.confirmation_cycles = 0u8;
         self.nv_config.aging_cycles = 0u8;
-        self.nv_config.uds_status.clear();
-        self.uds_status_old.clear();
     }
 
     /// Advances the event by one step based on the input condition.
@@ -512,6 +523,20 @@ mod tests {
             aging_cycles: aging,
             confirmation_cycles: confirm,
         }))
+    }
+
+    fn create_event(
+        _event_id: EventId,
+        nv_config: &'static mut NvmConfig,
+        cal_config: &'static CalibConfig,
+    ) -> Event {
+        Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config,
+            cal_config,
+        }
     }
 
     // ────────────────────────────────────────────
@@ -1275,6 +1300,160 @@ mod tests {
     }
 
     #[test]
+    fn stop_tftoc_true_increments_confirmation_cycles() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg = create_nvm_config(0, 0, 2, true, false, false);
+
+        let conf_cycles_after = {
+            let mut evt = Event {
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            };
+            evt.stop();
+            evt.nv_config.confirmation_cycles
+        };
+
+        assert_eq!(conf_cycles_after, 3);
+    }
+
+    #[test]
+    fn stop_tftoc_true_cdtc_already_set() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
+
+        let conf_cycles_after = {
+            let mut evt = Event {
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            };
+            evt.stop();
+            evt.nv_config.confirmation_cycles
+        };
+
+        assert_eq!(conf_cycles_after, 3);
+    }
+
+    #[test]
+    fn stop_tnctoc_true_does_nothing() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, true, false);
+
+        let conf_cycles_after = {
+            let mut evt = Event {
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            };
+            assert!(!evt.status().tftoc());
+            assert!(evt.status().tnctoc());
+            evt.stop();
+            evt.nv_config.confirmation_cycles
+        };
+
+        assert_eq!(conf_cycles_after, 0);
+    }
+
+    #[test]
+    fn stop_tftoc_false_cdtc_false_sets_pdtc() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, false, false);
+
+        let status = {
+            let mut evt = Event {
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            };
+            assert!(!evt.status().tftoc());
+            assert!(!evt.status().tnctoc());
+            assert!(!evt.status().cdtc());
+            evt.stop();
+            evt.status()
+        };
+
+        assert!(!status.pdtc());
+    }
+
+    #[test]
+    fn stop_aging_not_complete_increments_aging() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg = create_nvm_config(0, 2, 0, false, false, true);
+
+        let aging_after = {
+            let mut evt = Event {
+                debounce_counter: 0,
+                uds_status_old: n_cfg.uds_status,
+                disabled: false,
+                nv_config: n_cfg,
+                cal_config: c_cfg,
+            };
+            assert!(!evt.status().tftoc());
+            assert!(!evt.status().tnctoc());
+            assert!(evt.status().cdtc());
+            assert_eq!(evt.nv_config.aging_cycles, 2);
+            evt.stop();
+            evt.nv_config.aging_cycles
+        };
+
+        assert_eq!(aging_after, 3);
+    }
+
+    #[test]
     fn stop_not_failed_aging_completes_clears_cdtc() {
         let c_cfg = create_cal_config(
             1,
@@ -1286,7 +1465,7 @@ mod tests {
             0,
             SaveTrigger::OnCdtc,
         );
-        let n_cfg = create_nvm_config(0, 4, 0, false, false, true);
+        let n_cfg = create_nvm_config(0, 5, 0, false, false, true);
 
         let status = {
             let mut evt = Event {
@@ -1341,7 +1520,7 @@ mod tests {
     }
 
     #[test]
-    fn stop_failed_sets_cdtc() {
+    fn stop_failed_increments_confirmation_cycles() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -1354,7 +1533,7 @@ mod tests {
         );
         let n_cfg = create_nvm_config(0, 0, 2, true, false, false);
 
-        let status = {
+        let conf_cycles_after = {
             let mut evt = Event {
                 debounce_counter: 0,
                 uds_status_old: n_cfg.uds_status,
@@ -1366,10 +1545,10 @@ mod tests {
             assert!(!evt.status().tnctoc());
             assert!(!evt.status().cdtc());
             evt.stop();
-            evt.status()
+            evt.nv_config.confirmation_cycles
         };
 
-        assert!(status.cdtc());
+        assert_eq!(conf_cycles_after, 3);
     }
 
     #[test]
@@ -1487,6 +1666,40 @@ mod tests {
         assert!(manager.events[0].nv_config.uds_status.tnctoc());
         assert!(!manager.events[1].nv_config.uds_status.tf());
         assert!(manager.events[1].nv_config.uds_status.tnctoc());
+    }
+
+    #[test]
+    fn event_manager_stop_calls_all_events() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg1 = create_nvm_config(0, 0, 0, true, false, true);
+        let n_cfg2 = create_nvm_config(0, 0, 0, true, false, true);
+
+        let event1 = create_event(0, n_cfg1, c_cfg);
+        let event2 = create_event(1, n_cfg2, c_cfg);
+        let events = Box::leak(Box::new([event1, event2]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager {
+            events,
+            extended_records: ext_list,
+        };
+
+        assert!(!manager.events[0].disabled);
+        assert!(!manager.events[1].disabled);
+
+        manager.stop();
+
+        assert!(manager.events[0].disabled);
+        assert!(manager.events[1].disabled);
     }
 
     #[test]
