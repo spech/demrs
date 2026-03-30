@@ -5,7 +5,8 @@
 #[allow(dead_code)]
 pub mod {{ fixture.module_name }} {
     use crate::CalibConfig;
-    use crate::event::{DebounceBehavior, DebounceType, Event, EventManager, NvmConfig, SaveTrigger, EventManagerState};
+    use crate::event::{DebounceBehavior, DebounceType, Event, NvmConfig, SaveTrigger};
+    use crate::event_manager::{EventManager, EventManagerState};
     use crate::ExtendedRecordList;
     use crate::UdsStatusByte;
 
