@@ -151,6 +151,13 @@ pub struct NvmConfig {
 // EventManager
 // ─────────────────────────────────────────────
 
+/// Runtime state of the EventManager.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventManagerState {
+    On,
+    Off,
+}
+
 /// Manages a collection of [`Event`]s and their associated [`ExtendedRecord`] data.
 ///
 /// The `EventManager` coordinates debouncing logic and persistent storage
@@ -171,6 +178,8 @@ pub struct EventManager {
     pub events: &'static mut [Event],
     /// Reference to [`ExtendedRecordList`] for persistent metadata.
     pub extended_records: &'static mut ExtendedRecordList,
+    /// Runtime state of the EventManager.
+    pub state: EventManagerState,
 }
 
 impl EventManager {
@@ -182,18 +191,22 @@ impl EventManager {
     /// Initializes all managed events at the start of a new operating cycle.
     ///
     /// Calls [`Event::init()`] on each event to reset `tf` and set `tnctoc`.
+    /// Sets the state to [`State::On`].
     pub fn init(&mut self) {
         for event in self.events.iter_mut() {
             event.init();
         }
+        self.state = EventManagerState::On;
     }
 
     /// Stops all managed events at shutdown.
     ///
+    /// Sets the state to [`State::Off`].
     /// Calls [`Event::stop()`] on each event to update cycle counters and disable them.
     /// If a falling edge is detected on the save_trigger status bit, the corresponding
     /// extended record is freed.
     pub fn stop(&mut self) {
+        self.state = EventManagerState::Off;
         let len = self.events.len();
         for index in 0..len {
             let save_trigger = self.events[index].cal_config.save_trigger;
@@ -213,6 +226,8 @@ impl EventManager {
     }
 
     /// Advances the specified event by one step.
+    ///
+    /// Returns [`EventManagerError::NotInitializedError`] if the state is [`State::Off`].
     pub fn step(
         &mut self,
         event_id: EventId,
@@ -221,6 +236,10 @@ impl EventManager {
         sampling: f32,
         timestamp: u32,
     ) -> Result<UdsStatusByte, EventManagerError> {
+        if self.state != EventManagerState::On {
+            return Err(EventManagerError::NotInitializedError);
+        }
+
         let index = event_id as usize;
         if index >= self.events.len() {
             return Err(EventManagerError::InvalidEventIdError);
@@ -342,12 +361,14 @@ impl Event {
         self.nv_config.uds_status.clear();
         self.uds_status_old.clear();
         self.reset_counter();
+        self.disabled = false;
     }
 
     /// Stops the event, typically at shutdown.
     ///
     /// Updates cycle counters based on current status and disables the event.
     pub fn stop(&mut self) -> UdsStatusByte {
+        self.disabled = true;
         if !self.nv_config.uds_status.tftoc() {
             if !self.nv_config.uds_status.tnctoc() {
                 self.nv_config.uds_status.set_pdtc(false);
@@ -369,7 +390,6 @@ impl Event {
                 }
             }
         }
-        self.disabled = true;
         self.nv_config.uds_status
     }
 
@@ -1644,8 +1664,10 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
 
+        manager.init();
         let result = manager.step(0, Status::PreFailed, true, 0.0, 0);
         assert!(result.is_ok());
     }
@@ -1688,6 +1710,7 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
 
         assert!(manager.events[0].nv_config.uds_status.tf());
@@ -1726,6 +1749,7 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
 
         assert!(!manager.events[0].disabled);
@@ -1760,8 +1784,10 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
 
+        manager.init();
         manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
         manager.step(1, Status::Failed, true, 0.0, 100).unwrap();
 
@@ -1807,8 +1833,10 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
 
+        manager.init();
         let result = manager.step(99, Status::PreFailed, true, 0.0, 0);
         assert_eq!(result.unwrap_err(), EventManagerError::InvalidEventIdError);
     }
@@ -1840,10 +1868,81 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
 
+        manager.init();
         let result = manager.step(0, Status::PreFailed, true, -1.0, 0);
         assert_eq!(result.unwrap_err(), EventManagerError::EventStepError);
+    }
+
+    #[test]
+    fn event_manager_step_returns_error_when_state_off() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
+
+        let event = Event {
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
+        let events = Box::leak(Box::new([event]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager {
+            events,
+            extended_records: ext_list,
+            state: EventManagerState::Off,
+        };
+
+        let result = manager.step(0, Status::Failed, true, 0.0, 100);
+        assert_eq!(result.unwrap_err(), EventManagerError::NotInitializedError);
+    }
+
+    #[test]
+    fn event_manager_step_succeeds_after_init() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
+
+        let event = Event {
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
+        let events = Box::leak(Box::new([event]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager {
+            events,
+            extended_records: ext_list,
+            state: EventManagerState::Off,
+        };
+
+        manager.init();
+        let result = manager.step(0, Status::Failed, true, 0.0, 100);
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1873,8 +1972,10 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
 
+        manager.init();
         manager.step(0, Status::Failed, true, 0.0, 0).unwrap();
 
         let ext_rec = manager.extended_records.get_by_event_id(0);
@@ -1909,15 +2010,17 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
 
+        manager.init();
         manager.step(0, Status::Passed, true, 1.0, 0).unwrap();
 
         assert!(manager.extended_records.is_empty());
     }
 
     #[test]
-    fn event_manager_extended_record_updated_on_reinsert() {
+    fn event_manager_extended_record_no_update_without_rising_edge() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -1943,7 +2046,10 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
+
+        manager.init();
 
         manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
         let first_rec = manager.extended_records.get_by_event_id(0).unwrap();
@@ -1952,8 +2058,60 @@ mod tests {
         manager.step(0, Status::Failed, true, 0.0, 200).unwrap();
         let second_rec = manager.extended_records.get_by_event_id(0).unwrap();
 
-        assert!(second_rec.date_at_last_save > first_date);
+        assert_eq!(second_rec.date_at_last_save, first_date);
         assert_eq!(second_rec.event_id, 0);
+    }
+
+    #[test]
+    fn event_manager_extended_record_reinsert_on_rising_edge_after_stop() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
+
+        let event = Event {
+            debounce_counter: 0,
+            uds_status_old: n_cfg.uds_status,
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
+        let events = Box::leak(Box::new([event]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager {
+            events,
+            extended_records: ext_list,
+            state: EventManagerState::Off,
+        };
+
+        manager.init();
+        manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
+        let first_date = manager
+            .extended_records
+            .get_by_event_id(0)
+            .unwrap()
+            .date_at_last_save;
+
+        manager.stop();
+        manager.init();
+
+        manager.step(0, Status::Failed, true, 0.0, 200).unwrap();
+        let second_date = manager
+            .extended_records
+            .get_by_event_id(0)
+            .unwrap()
+            .date_at_last_save;
+
+        assert_eq!(second_date, 200);
+        assert_ne!(first_date, second_date);
     }
 
     #[test]
@@ -1987,8 +2145,10 @@ mod tests {
         let mut manager = EventManager {
             events,
             extended_records: ext_list,
+            state: EventManagerState::Off,
         };
 
+        manager.init();
         for i in 0..=24 {
             let result = manager.step(i as EventId, Status::Failed, true, 0.0, i as u32);
             if result.is_err() {

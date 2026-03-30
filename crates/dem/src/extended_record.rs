@@ -22,6 +22,8 @@ pub enum EventManagerError {
     InvalidEventIdError,
     /// The event step operation failed.
     EventStepError,
+    /// The EventManager is not initialized (state is Off).
+    NotInitializedError,
 }
 
 // ─────────────────────────────────────────────

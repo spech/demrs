@@ -5,7 +5,7 @@
 #[allow(dead_code)]
 pub mod {{ fixture.module_name }} {
     use crate::CalibConfig;
-    use crate::event::{DebounceBehavior, DebounceType, Event, EventManager, NvmConfig, SaveTrigger};
+    use crate::event::{DebounceBehavior, DebounceType, Event, EventManager, NvmConfig, SaveTrigger, EventManagerState};
     use crate::ExtendedRecordList;
     use crate::UdsStatusByte;
 
@@ -46,6 +46,7 @@ pub mod {{ fixture.module_name }} {
     pub static mut EVENT_MANAGER: EventManager = EventManager {
         events: unsafe { core::slice::from_raw_parts_mut(&raw mut ALL_EVENTS as *mut Event, {{ fixture.events|length }}) },
         extended_records: unsafe { &mut *(&raw mut EXTENDED_RECORDS) },
+        state: EventManagerState::Off,
     };
 
     pub const EVENT_COUNT: usize = {{ fixture.events|length }};

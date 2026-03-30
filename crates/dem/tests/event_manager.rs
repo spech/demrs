@@ -12,6 +12,7 @@ fn event_manager_rising_tf_creates_extended_record() {
             .unwrap()
     };
 
+    manager.init();
     let result = manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
     eprintln!("After step: cdtc={}", result.cdtc());
     eprintln!("Extended records len: {}", manager.extended_records.len());
@@ -33,13 +34,14 @@ fn event_manager_no_extended_record_without_rising_edge() {
             .unwrap()
     };
 
+    manager.init();
     manager.step(0, Status::Passed, true, 0.0, 100).unwrap();
 
     assert!(manager.extended_records.is_empty());
 }
 
 #[test]
-fn event_manager_extended_record_updates_on_subsequent_tf() {
+fn event_manager_extended_record_no_update_without_rising_edge() {
     reset_event_manager();
     let manager = unsafe {
         (&raw mut EVENT_MANAGER as *mut EventManager)
@@ -47,6 +49,7 @@ fn event_manager_extended_record_updates_on_subsequent_tf() {
             .unwrap()
     };
 
+    manager.init();
     manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
 
     let first_date = manager
@@ -63,5 +66,36 @@ fn event_manager_extended_record_updates_on_subsequent_tf() {
         .unwrap()
         .date_at_last_save;
 
-    assert!(second_date > first_date);
+    assert_eq!(second_date, first_date);
+}
+
+#[test]
+fn event_manager_extended_record_reinsert_on_rising_edge_after_stop() {
+    reset_event_manager();
+    let manager = unsafe {
+        (&raw mut EVENT_MANAGER as *mut EventManager)
+            .as_mut()
+            .unwrap()
+    };
+
+    manager.init();
+    manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
+    let first_date = manager
+        .extended_records
+        .get_by_event_id(0)
+        .unwrap()
+        .date_at_last_save;
+
+    manager.stop();
+    manager.init();
+
+    manager.step(0, Status::Failed, true, 0.0, 200).unwrap();
+    let second_date = manager
+        .extended_records
+        .get_by_event_id(0)
+        .unwrap()
+        .date_at_last_save;
+
+    assert_eq!(second_date, 200);
+    assert_ne!(first_date, second_date);
 }

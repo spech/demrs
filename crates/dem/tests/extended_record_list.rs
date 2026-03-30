@@ -12,6 +12,7 @@ fn extended_record_list_full_evicts_lowest_priority() {
             .unwrap()
     };
 
+    manager.init();
     for i in 0..24 {
         manager
             .step(i as u16, Status::Failed, true, 0.0, i)
@@ -37,6 +38,7 @@ fn extended_record_list_insert_respects_capacity() {
             .unwrap()
     };
 
+    manager.init();
     for i in 0..24 {
         manager
             .step(i as u16, Status::Failed, true, 0.0, i)
@@ -59,6 +61,7 @@ fn extended_record_list_priority_order_maintained() {
             .unwrap()
     };
 
+    manager.init();
     manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
     manager.step(1, Status::Failed, true, 0.0, 101).unwrap();
     manager.step(2, Status::Failed, true, 0.0, 102).unwrap();
