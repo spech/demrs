@@ -37,13 +37,17 @@
 pub struct UdsStatusByte(u8);
 
 impl UdsStatusByte {
-    pub(crate) const TF_BIT: u8 = 1 << 0; // bit 0
-    pub(crate) const TFTOC_BIT: u8 = 1 << 1; // bit 1
-    pub(crate) const PDTC_BIT: u8 = 1 << 2; // bit 2
-    pub(crate) const CDTC_BIT: u8 = 1 << 3; // bit 3
-    pub(crate) const TNCSLC_BIT: u8 = 1 << 4; // bit 4
-    pub(crate) const TFSLC_BIT: u8 = 1 << 5; // bit 5
-    pub(crate) const TNCTOC_BIT: u8 = 1 << 6; // bit 6
+    pub const TF_BIT: u8 = 1 << 0; // bit 0
+    pub const TFTOC_BIT: u8 = 1 << 1; // bit 1
+    pub const PDTC_BIT: u8 = 1 << 2; // bit 2
+    pub const CDTC_BIT: u8 = 1 << 3; // bit 3
+    pub const TNCSLC_BIT: u8 = 1 << 4; // bit 4
+    pub const TFSLC_BIT: u8 = 1 << 5; // bit 5
+    pub const TNCTOC_BIT: u8 = 1 << 6; // bit 6
+
+    pub const fn from_raw(raw: u8) -> Self {
+        UdsStatusByte(raw)
+    }
 
     /// Creates a `UdsStatusByte` from a raw bitmask.
     ///
@@ -167,7 +171,7 @@ impl UdsStatusByte {
     /// ```
     pub fn set_cdtc(&mut self, val: bool) {
         if val {
-            self.0 |= Self::CDTC_BIT; // sets
+            self.0 = (self.0 | Self::CDTC_BIT) & !Self::PDTC_BIT; // sets
         } else {
             self.0 &= !Self::CDTC_BIT;
         }
@@ -407,6 +411,16 @@ mod tests {
         assert!(s.cdtc());
         s.set_cdtc(false);
         assert!(!s.cdtc());
+    }
+
+    #[test]
+    fn status_flags_set_cdtc_resets_pdtc() {
+        let mut s = UdsStatusByte::new(0);
+        s.set_pdtc(true);
+        assert!(s.pdtc());
+        s.set_cdtc(true);
+        assert!(s.cdtc());
+        assert!(!s.pdtc());
     }
 
     #[test]

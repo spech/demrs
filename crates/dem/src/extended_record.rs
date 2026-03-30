@@ -43,12 +43,12 @@ pub enum EventManagerError {
 pub struct ExtendedRecord {
     /// Unique identifier for this event.
     pub event_id: EventId,
-    /// Priority value used for ordering in [`ExtendedRecordList`].
+    /// Priority value for ordering in [`ExtendedRecordList`].
     pub priority: u8,
-    /// Timestamp of the first save operation.
-    pub date_at_first_save: Option<chrono::DateTime<chrono::Utc>>,
-    /// Timestamp of the last save operation.
-    pub date_at_last_save: Option<chrono::DateTime<chrono::Utc>>,
+    /// Timestamp of the first save operation (0 = not set).
+    pub date_at_first_save: u32,
+    /// Timestamp of the last save operation (0 = not set).
+    pub date_at_last_save: u32,
 }
 
 // ─────────────────────────────────────────────
@@ -57,9 +57,7 @@ pub struct ExtendedRecord {
 
 /// Result of finding the lowest priority entry in an [`ExtendedRecordList`].
 pub struct LowestPriorityResult {
-    /// Index of the lowest priority entry.
     pub index: usize,
-    /// The lowest priority value.
     pub priority: u8,
 }
 
@@ -96,6 +94,10 @@ impl ExtendedRecordList {
             data: [const { None }; 24],
             len: 0,
         }
+    }
+
+    pub fn as_mut(&mut self) -> &mut ExtendedRecordList {
+        self
     }
 
     /// Returns the number of entries in the list.
@@ -294,8 +296,8 @@ mod tests {
             let ext_rec = ExtendedRecord {
                 event_id: i,
                 priority: 10 + i as u8,
-                date_at_first_save: None,
-                date_at_last_save: None,
+                date_at_first_save: 0,
+                date_at_last_save: 0,
             };
             list.insert(ext_rec).unwrap();
         }
@@ -306,8 +308,8 @@ mod tests {
         let ext_rec = ExtendedRecord {
             event_id: 99,
             priority: 100,
-            date_at_first_save: None,
-            date_at_last_save: None,
+            date_at_first_save: 0,
+            date_at_last_save: 0,
         };
         let result = list.insert(ext_rec);
         assert_eq!(result.unwrap_err(), EventManagerError::ListFullError);
@@ -328,8 +330,8 @@ mod tests {
         let ext_rec = ExtendedRecord {
             event_id: 1,
             priority: 5,
-            date_at_first_save: None,
-            date_at_last_save: None,
+            date_at_first_save: 0,
+            date_at_last_save: 0,
         };
         list.insert(ext_rec).unwrap();
 
@@ -348,8 +350,8 @@ mod tests {
             let ext_rec = ExtendedRecord {
                 event_id: (i + 1) as EventId,
                 priority,
-                date_at_first_save: None,
-                date_at_last_save: None,
+                date_at_first_save: 0,
+                date_at_last_save: 0,
             };
             list.insert(ext_rec).unwrap();
         }
@@ -375,8 +377,8 @@ mod tests {
             let ext_rec = ExtendedRecord {
                 event_id: (i + 1) as EventId,
                 priority,
-                date_at_first_save: None,
-                date_at_last_save: None,
+                date_at_first_save: 0,
+                date_at_last_save: 0,
             };
             list.insert(ext_rec).unwrap();
         }
