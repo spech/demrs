@@ -25,7 +25,7 @@ pub mod {{ fixture.module_name }} {
         confirmation_threshold: {{ event.calib.confirmation_threshold }},
         aging_threshold: {{ event.calib.aging_threshold }},
         priority: {{ event.calib.priority }},
-        save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'TriggerOnCdtc' }},
+        save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnCdtc' }},
     };
 {% endfor %}
 
@@ -34,7 +34,6 @@ pub mod {{ fixture.module_name }} {
     static mut ALL_EVENTS: [Event; {{ fixture.events|length }}] = [
 {% for event in fixture.events %}
         Event {
-            event_id: {{ event.id }},
             debounce_counter: 0,
             uds_status_old: UdsStatusByte::from_raw({{ event.nvm.raw_status }}),
             disabled: false,

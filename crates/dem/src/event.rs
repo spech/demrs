@@ -88,9 +88,9 @@ pub enum EventError {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SaveTrigger {
     /// Save extended record when `cdtc` (confirmed DTC) is set.
-    TriggerOnCdtc,
+    OnCdtc,
     /// Save extended record when `pdtc` (pending DTC) is set.
-    TriggerOnPdtc,
+    OnPdtc,
 }
 
 // ─────────────────────────────────────────────
@@ -179,6 +179,15 @@ impl EventManager {
         *self.extended_records = ExtendedRecordList::new();
     }
 
+    /// Initializes all managed events at the start of a new operating cycle.
+    ///
+    /// Calls [`Event::init()`] on each event to reset `tf` and set `tnctoc`.
+    pub fn init(&mut self) {
+        for event in self.events.iter_mut() {
+            event.init();
+        }
+    }
+
     /// Advances the specified event by one step.
     pub fn step(
         &mut self,
@@ -194,38 +203,31 @@ impl EventManager {
         }
 
         let event = &mut self.events[index];
-        let event_id = event.event_id;
-        let priority = event.cal_config.priority;
-        let save_trigger = event.cal_config.save_trigger;
-        let old_status = event.uds_status_old;
-        let new_status = event
+        event
             .step(condition, active, sampling)
             .map_err(|_| EventManagerError::EventStepError)?;
+        let new_status = event.nv_config.uds_status;
 
-        self.store_in_extended_records(
-            event_id,
-            priority,
-            save_trigger,
-            old_status,
-            new_status,
-            timestamp,
-        )?;
+        self.store_in_extended_records(index, timestamp)?;
 
         Ok(new_status)
     }
 
     fn store_in_extended_records(
         &mut self,
-        event_id: EventId,
-        priority: u8,
-        save_trigger: SaveTrigger,
-        old_status: UdsStatusByte,
-        new_status: UdsStatusByte,
+        index: usize,
         timestamp: u32,
     ) -> Result<(), EventManagerError> {
+        let event_id = index as EventId;
+        let event = &self.events[index];
+        let priority = event.cal_config.priority;
+        let save_trigger = event.cal_config.save_trigger;
+        let old_status = event.uds_status_old;
+        let new_status = event.nv_config.uds_status;
+
         let status_triggered = match save_trigger {
-            SaveTrigger::TriggerOnCdtc => new_status.cdtc() && !old_status.cdtc(),
-            SaveTrigger::TriggerOnPdtc => new_status.pdtc() && !old_status.pdtc(),
+            SaveTrigger::OnCdtc => new_status.cdtc() && !old_status.cdtc(),
+            SaveTrigger::OnPdtc => new_status.pdtc() && !old_status.pdtc(),
         };
 
         if status_triggered {
@@ -268,8 +270,6 @@ impl EventManager {
 ///
 /// Create an `Event` with [`CalibConfig`] and [`NvmConfig`], then call [`step`] with status signals.
 pub struct Event {
-    /// Unique identifier for this event.
-    pub(crate) event_id: EventId,
     /// Accumulated debounce counter, positive toward Failed, negative toward Passed.
     pub(crate) debounce_counter: i16,
     /// Previous UDS status byte for detecting rising edges.
@@ -290,6 +290,14 @@ impl Event {
     /// * `turnoff` - If `true`, disables debouncing; if `false`, enables it.
     pub fn disable(&mut self, turnoff: bool) {
         self.disabled = turnoff;
+    }
+
+    /// Initializes the event at the start of a new operating cycle.
+    ///
+    /// Resets `tf` (test failed) to false and sets `tnctoc` (test not complete this operating cycle) to true.
+    pub fn init(&mut self) {
+        self.nv_config.uds_status.set_tf(false);
+        self.nv_config.uds_status.set_tnctoc(true);
     }
 
     /// Stops the event, typically at shutdown.
@@ -520,7 +528,7 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         assert_eq!(cfg.confirmation_threshold, 3);
         assert_eq!(cfg.aging_threshold, 5);
@@ -545,12 +553,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -559,6 +566,39 @@ mod tests {
         };
         assert_eq!(evt.cal_config.confirmation_threshold, 4u8);
         assert_eq!(evt.cal_config.aging_threshold, 6u8);
+    }
+
+    #[test]
+    fn event_init_resets_tf_and_sets_tnctoc() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg = create_nvm_config(0, 0, 0, false, false, false);
+
+        let mut evt = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: n_cfg,
+            cal_config: c_cfg,
+        };
+
+        evt.nv_config.uds_status.set_tf(true);
+
+        assert!(evt.nv_config.uds_status.tf());
+        assert!(!evt.nv_config.uds_status.tnctoc());
+
+        evt.init();
+
+        assert!(!evt.nv_config.uds_status.tf());
+        assert!(evt.nv_config.uds_status.tnctoc());
     }
 
     #[test]
@@ -571,12 +611,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             42,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -600,12 +639,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -627,12 +665,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -655,12 +692,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -682,12 +718,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 2, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -713,12 +748,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -740,12 +774,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -776,12 +809,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -806,12 +838,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -835,12 +866,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -863,12 +893,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -892,12 +921,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -921,12 +949,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Reset,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -950,12 +977,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -979,12 +1005,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1017,7 +1042,7 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         // This test verifies that thresholds are set correctly
         assert_eq!(c_cfg.confirmation_threshold, 3u8);
@@ -1038,12 +1063,11 @@ mod tests {
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1066,12 +1090,11 @@ mod tests {
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1100,12 +1123,11 @@ mod tests {
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1131,13 +1153,12 @@ mod tests {
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg1 = create_nvm_config(0, 0, 0, false, true, false);
         let n_cfg2 = create_nvm_config(0, 0, 0, false, true, false);
 
         let mut evt1 = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg1.uds_status,
             disabled: false,
@@ -1148,7 +1169,6 @@ mod tests {
         let counter_10ms = evt1.debounce_counter();
 
         let mut evt2 = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg2.uds_status,
             disabled: false,
@@ -1173,12 +1193,11 @@ mod tests {
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1201,12 +1220,11 @@ mod tests {
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1233,13 +1251,12 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, false, true);
 
         let status = {
             let mut evt = Event {
-                event_id: 0,
                 debounce_counter: 0,
                 uds_status_old: n_cfg.uds_status,
                 disabled: false,
@@ -1267,13 +1284,12 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 4, 0, false, false, true);
 
         let status = {
             let mut evt = Event {
-                event_id: 0,
                 debounce_counter: 0,
                 uds_status_old: n_cfg.uds_status,
                 disabled: false,
@@ -1301,13 +1317,12 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, false, false);
 
         let status = {
             let mut evt = Event {
-                event_id: 0,
                 debounce_counter: 0,
                 uds_status_old: n_cfg.uds_status,
                 disabled: false,
@@ -1335,13 +1350,12 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 2, true, false, false);
 
         let status = {
             let mut evt = Event {
-                event_id: 0,
                 debounce_counter: 0,
                 uds_status_old: n_cfg.uds_status,
                 disabled: false,
@@ -1368,12 +1382,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 0, false, false, true);
 
         let mut evt = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1400,12 +1413,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1425,6 +1437,59 @@ mod tests {
     }
 
     #[test]
+    fn event_manager_init_calls_all_events() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg1 = create_nvm_config(0, 0, 0, false, false, false);
+        let n_cfg2 = create_nvm_config(0, 0, 0, false, false, false);
+
+        n_cfg1.uds_status.set_tf(true);
+        n_cfg2.uds_status.set_tf(true);
+
+        let event1 = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: n_cfg1,
+            cal_config: c_cfg,
+        };
+        let event2 = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: n_cfg2,
+            cal_config: c_cfg,
+        };
+        let events = Box::leak(Box::new([event1, event2]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager {
+            events,
+            extended_records: ext_list,
+        };
+
+        assert!(manager.events[0].nv_config.uds_status.tf());
+        assert!(!manager.events[0].nv_config.uds_status.tnctoc());
+        assert!(manager.events[1].nv_config.uds_status.tf());
+        assert!(!manager.events[1].nv_config.uds_status.tnctoc());
+
+        manager.init();
+
+        assert!(!manager.events[0].nv_config.uds_status.tf());
+        assert!(manager.events[0].nv_config.uds_status.tnctoc());
+        assert!(!manager.events[1].nv_config.uds_status.tf());
+        assert!(manager.events[1].nv_config.uds_status.tnctoc());
+    }
+
+    #[test]
     fn event_manager_step_invalid_id() {
         let c_cfg = create_cal_config(
             1,
@@ -1434,12 +1499,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1468,12 +1532,11 @@ mod tests {
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-            event_id: 0,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1502,12 +1565,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-            event_id: 42,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1524,9 +1586,9 @@ mod tests {
 
         manager.step(0, Status::Failed, true, 0.0, 0).unwrap();
 
-        let ext_rec = manager.extended_records.get_by_event_id(42);
+        let ext_rec = manager.extended_records.get_by_event_id(0);
         assert!(ext_rec.is_some());
-        assert_eq!(ext_rec.unwrap().event_id, 42);
+        assert_eq!(ext_rec.unwrap().event_id, 0);
     }
 
     #[test]
@@ -1539,12 +1601,11 @@ mod tests {
             DebounceType::TimeBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-            event_id: 42,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1574,12 +1635,11 @@ mod tests {
             DebounceType::CounterBased,
             DebounceBehavior::Freeze,
             0,
-            SaveTrigger::TriggerOnCdtc,
+            SaveTrigger::OnCdtc,
         );
         let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
 
         let event = Event {
-            event_id: 42,
             debounce_counter: 0,
             uds_status_old: n_cfg.uds_status,
             disabled: false,
@@ -1595,14 +1655,14 @@ mod tests {
         };
 
         manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
-        let first_rec = manager.extended_records.get_by_event_id(42).unwrap();
+        let first_rec = manager.extended_records.get_by_event_id(0).unwrap();
         let first_date = first_rec.date_at_last_save;
 
         manager.step(0, Status::Failed, true, 0.0, 200).unwrap();
-        let second_rec = manager.extended_records.get_by_event_id(42).unwrap();
+        let second_rec = manager.extended_records.get_by_event_id(0).unwrap();
 
         assert!(second_rec.date_at_last_save > first_date);
-        assert_eq!(second_rec.event_id, 42);
+        assert_eq!(second_rec.event_id, 0);
     }
 
     #[test]
@@ -1619,11 +1679,10 @@ mod tests {
                 DebounceType::CounterBased,
                 DebounceBehavior::Freeze,
                 priority,
-                SaveTrigger::TriggerOnCdtc,
+                SaveTrigger::OnCdtc,
             );
             let n_cfg = create_nvm_config(0, 0, 3, false, true, false);
             events_vec.push(Event {
-                event_id: i as EventId,
                 debounce_counter: 0,
                 uds_status_old: n_cfg.uds_status,
                 disabled: false,
