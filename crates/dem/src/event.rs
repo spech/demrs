@@ -191,9 +191,24 @@ impl EventManager {
     /// Stops all managed events at shutdown.
     ///
     /// Calls [`Event::stop()`] on each event to update cycle counters and disable them.
+    /// If a falling edge is detected on the save_trigger status bit, the corresponding
+    /// extended record is freed.
     pub fn stop(&mut self) {
-        for event in self.events.iter_mut() {
-            event.stop();
+        let len = self.events.len();
+        for index in 0..len {
+            let save_trigger = self.events[index].cal_config.save_trigger;
+            let old_status = self.events[index].uds_status_old;
+            let new_status = self.events[index].stop();
+
+            let falling_edge = match save_trigger {
+                SaveTrigger::OnCdtc => !new_status.cdtc() && old_status.cdtc(),
+                SaveTrigger::OnPdtc => !new_status.pdtc() && old_status.pdtc(),
+            };
+
+            if falling_edge {
+                let event_id = index as EventId;
+                self.free_from_extended_records(event_id);
+            }
         }
     }
 
@@ -234,12 +249,12 @@ impl EventManager {
         let old_status = event.uds_status_old;
         let new_status = event.nv_config.uds_status;
 
-        let status_triggered = match save_trigger {
+        let rising_edge = match save_trigger {
             SaveTrigger::OnCdtc => new_status.cdtc() && !old_status.cdtc(),
             SaveTrigger::OnPdtc => new_status.pdtc() && !old_status.pdtc(),
         };
 
-        if status_triggered {
+        if rising_edge {
             if let Some(existing) = self.extended_records.get_by_event_id_mut(event_id) {
                 existing.date_at_last_save = timestamp;
             } else {
@@ -254,6 +269,25 @@ impl EventManager {
         }
 
         Ok(())
+    }
+
+    /// Frees (removes) an entry from the extended records list by event ID.
+    ///
+    /// If an entry with the given event ID exists, it is removed.
+    /// If no entry exists with that event ID, this function does nothing.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_id` - The event ID of the entry to free.
+    pub fn free_from_extended_records(&mut self, event_id: EventId) {
+        let index_to_remove = self
+            .extended_records
+            .iter()
+            .position(|rec| rec.event_id == event_id);
+
+        if let Some(index) = index_to_remove {
+            self.extended_records.remove(index);
+        }
     }
 }
 
@@ -313,7 +347,7 @@ impl Event {
     /// Stops the event, typically at shutdown.
     ///
     /// Updates cycle counters based on current status and disables the event.
-    pub fn stop(&mut self) {
+    pub fn stop(&mut self) -> UdsStatusByte {
         if !self.nv_config.uds_status.tftoc() {
             if !self.nv_config.uds_status.tnctoc() {
                 self.nv_config.uds_status.set_pdtc(false);
@@ -336,6 +370,7 @@ impl Event {
             }
         }
         self.disabled = true;
+        self.nv_config.uds_status
     }
 
     /// Clears the event state: resets counters, flags, and status.
@@ -1700,6 +1735,49 @@ mod tests {
 
         assert!(manager.events[0].disabled);
         assert!(manager.events[1].disabled);
+    }
+
+    #[test]
+    fn event_manager_free_from_extended_records() {
+        let c_cfg = create_cal_config(
+            1,
+            0,
+            3,
+            5,
+            DebounceType::CounterBased,
+            DebounceBehavior::Freeze,
+            0,
+            SaveTrigger::OnCdtc,
+        );
+        let n_cfg1 = create_nvm_config(0, 0, 3, false, true, false);
+        let n_cfg2 = create_nvm_config(0, 0, 3, false, true, false);
+
+        let event1 = create_event(0, n_cfg1, c_cfg);
+        let event2 = create_event(1, n_cfg2, c_cfg);
+        let events = Box::leak(Box::new([event1, event2]));
+        let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+
+        let mut manager = EventManager {
+            events,
+            extended_records: ext_list,
+        };
+
+        manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
+        manager.step(1, Status::Failed, true, 0.0, 100).unwrap();
+
+        assert_eq!(manager.extended_records.len(), 2);
+        assert!(manager.extended_records.get_by_event_id(0).is_some());
+        assert!(manager.extended_records.get_by_event_id(1).is_some());
+
+        manager.free_from_extended_records(0);
+
+        assert_eq!(manager.extended_records.len(), 1);
+        assert!(manager.extended_records.get_by_event_id(0).is_none());
+        assert!(manager.extended_records.get_by_event_id(1).is_some());
+
+        manager.free_from_extended_records(99);
+
+        assert_eq!(manager.extended_records.len(), 1);
     }
 
     #[test]
