@@ -424,6 +424,17 @@ mod tests {
         save_trigger: SaveTrigger::OnCdtc,
     };
 
+    const CALIB_COUNTER_RESET_1_0: CalibConfig = CalibConfig {
+        step_up: 1,
+        step_down: 0,
+        debounce_behavior: DebounceBehavior::Reset,
+        debounce_type: DebounceType::CounterBased,
+        confirmation_threshold: 1,
+        aging_threshold: 1,
+        priority: 0,
+        save_trigger: SaveTrigger::OnCdtc,
+    };
+
     const CALIB_TIME_FREEZE_1_0: CalibConfig = CalibConfig {
         step_up: 1,
         step_down: 0,
@@ -489,21 +500,12 @@ mod tests {
             (1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze) => {
                 &CALIB_COUNTER_FREEZE_1_0
             }
-            (1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => {
-                &CALIB_TIME_FREEZE_1_0
-            }
-            (0, 1, DebounceType::TimeBased, DebounceBehavior::Freeze) => {
-                &CALIB_TIME_FREEZE_0_1
-            }
-            (0, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => {
-                &CALIB_TIME_FREEZE_0_0
-            }
-            (2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => {
-                &CALIB_TIME_FREEZE_2_0
-            }
-            (0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze) => {
-                &CALIB_TIME_FREEZE_0_2
-            }
+            (1, 0, DebounceType::CounterBased, DebounceBehavior::Reset) => &CALIB_COUNTER_RESET_1_0,
+            (1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_1_0,
+            (0, 1, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_0_1,
+            (0, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_0_0,
+            (2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_2_0,
+            (0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_0_2,
             _ => panic!(
                 "unsupported calibration: step_up={}, step_down={}, type={:?}, behavior={:?}",
                 step_up, step_down, debounce_type, debounce_behavior
@@ -543,12 +545,7 @@ mod tests {
 
     #[test]
     fn event_step_active_true_updates_state() {
-        let mut event = create_event(
-            1,
-            0,
-            DebounceType::CounterBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
 
         let result = event.step(Status::PreFailed, true, 0.0).unwrap();
 
@@ -559,29 +556,31 @@ mod tests {
 
     #[test]
     fn event_step_active_false_preserves_state() {
-        let mut event = create_event(
-            1,
-            0,
-            DebounceType::CounterBased,
-            DebounceBehavior::Freeze,
-        );
-
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        event.debounce_counter = 5000;
         let old_status = event.status();
         let result = event.step(Status::PreFailed, false, 0.0).unwrap();
 
-        assert_eq!(event.debounce_counter(), 0);
+        assert_eq!(event.debounce_counter(), 5000);
         assert_eq!(event.status(), old_status);
         assert_eq!(result, old_status);
     }
 
+
+
+    #[test]
+    fn event_step_active_false_with_reset_behavior_resets_counter() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Reset);
+        event.debounce_counter = 5000;
+
+        event.step(Status::PreFailed, false, 0.0).unwrap();
+
+        assert_eq!(event.debounce_counter(), 0);
+    }
+
     #[test]
     fn timebased_negative_sampling_returns_error() {
-        let mut event = create_event(
-            1,
-            0,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         assert_eq!(
             event.step(Status::PreFailed, true, -1.0),
@@ -591,12 +590,7 @@ mod tests {
 
     #[test]
     fn timebased_zero_sampling_returns_error() {
-        let mut event = create_event(
-            1,
-            0,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         assert_eq!(
             event.step(Status::PreFailed, true, 0.0),
@@ -606,12 +600,7 @@ mod tests {
 
     #[test]
     fn timebased_pre_failed_step_up_one_snaps_failed() {
-        let mut event = create_event(
-            1,
-            0,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         let result = event.step(Status::PreFailed, true, 1.0).unwrap();
 
@@ -622,12 +611,7 @@ mod tests {
 
     #[test]
     fn timebased_pre_passed_step_down_one_snaps_passed() {
-        let mut event = create_event(
-            0,
-            1,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(0, 1, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         let result = event.step(Status::PrePassed, true, 1.0).unwrap();
 
@@ -639,12 +623,7 @@ mod tests {
 
     #[test]
     fn timebased_status_failed_snaps_failed() {
-        let mut event = create_event(
-            0,
-            0,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(0, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         let result = event.step(Status::Failed, true, 1.0).unwrap();
 
@@ -655,12 +634,7 @@ mod tests {
 
     #[test]
     fn timebased_status_passed_snaps_passed() {
-        let mut event = create_event(
-            0,
-            0,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(0, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         let result = event.step(Status::Passed, true, 1.0).unwrap();
 
@@ -672,12 +646,7 @@ mod tests {
 
     #[test]
     fn timebased_pre_failed_step_up_two_accumulates_counter() {
-        let mut event = create_event(
-            2,
-            0,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         let result = event.step(Status::PreFailed, true, 1.0).unwrap();
 
@@ -688,12 +657,7 @@ mod tests {
 
     #[test]
     fn timebased_pre_passed_step_down_two_accumulates_counter() {
-        let mut event = create_event(
-            0,
-            2,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         let result = event.step(Status::PrePassed, true, 1.0).unwrap();
 
@@ -705,12 +669,7 @@ mod tests {
 
     #[test]
     fn timebased_pre_failed_step_up_two_resets_negative_counter_and_accumulates() {
-        let mut event = create_event(
-            2,
-            0,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
         event.debounce_counter = -1000;
 
         let result = event.step(Status::PreFailed, true, 1.0).unwrap();
@@ -722,12 +681,7 @@ mod tests {
 
     #[test]
     fn timebased_pre_passed_step_down_two_resets_positive_counter_and_accumulates() {
-        let mut event = create_event(
-            0,
-            2,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze);
         event.debounce_counter = 1000;
 
         let result = event.step(Status::PrePassed, true, 1.0).unwrap();
@@ -740,12 +694,7 @@ mod tests {
 
     #[test]
     fn timebased_pre_failed_fractional_sampling_converts_seconds_to_millis() {
-        let mut event = create_event(
-            2,
-            0,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         let result = event.step(Status::PreFailed, true, 0.5).unwrap();
 
@@ -756,12 +705,7 @@ mod tests {
 
     #[test]
     fn timebased_pre_passed_fractional_sampling_converts_seconds_to_millis() {
-        let mut event = create_event(
-            0,
-            2,
-            DebounceType::TimeBased,
-            DebounceBehavior::Freeze,
-        );
+        let mut event = create_event(0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze);
 
         let result = event.step(Status::PrePassed, true, 0.5).unwrap();
 
@@ -770,4 +714,5 @@ mod tests {
         assert!(event.status().tnctoc());
         assert_eq!(result, event.status());
     }
+ 
 }
