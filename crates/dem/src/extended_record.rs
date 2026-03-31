@@ -10,20 +10,14 @@
 pub type EventId = u16;
 
 // ─────────────────────────────────────────────
-// EventManagerError
+// ExtendedRecordListError
 // ─────────────────────────────────────────────
 
-/// Error type for [`EventManager`] operations.
+/// Error type for [`ExtendedRecordList`] operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventManagerError {
+pub enum ExtendedRecordListError {
     /// The extended records list has reached its maximum capacity.
     ListFullError,
-    /// The provided event ID is out of bounds.
-    InvalidEventIdError,
-    /// The event step operation failed.
-    EventStepError,
-    /// The EventManager is not initialized (state is Off).
-    NotInitializedError,
 }
 
 // ─────────────────────────────────────────────
@@ -71,7 +65,7 @@ pub struct LowestPriorityResult {
 /// ## Capacity
 ///
 /// The list has a fixed capacity of 24 entries. Attempting to insert
-/// when full returns [`EventManagerError::ListFullError`].
+/// when full returns [`ExtendedRecordListError::ListFullError`].
 ///
 /// ## Usage
 ///
@@ -186,15 +180,15 @@ impl ExtendedRecordList {
     /// # Returns
     ///
     /// `Ok(())` if insertion succeeded.
-    /// `Err(EventManagerError::ListFullError)` if the list is full and no entry has lower priority.
-    pub fn insert(&mut self, ext_rec: ExtendedRecord) -> Result<(), EventManagerError> {
+    /// `Err(ExtendedRecordListError::ListFullError)` if the list is full and no entry has lower priority.
+    pub fn insert(&mut self, ext_rec: ExtendedRecord) -> Result<(), ExtendedRecordListError> {
         if self.is_full() {
             let new_priority = ext_rec.priority;
             let lowest = self.find_lowest_priority();
             if new_priority < lowest.priority {
                 self.remove(lowest.index);
             } else {
-                return Err(EventManagerError::ListFullError);
+                return Err(ExtendedRecordListError::ListFullError);
             }
         }
 
@@ -314,7 +308,7 @@ mod tests {
             date_at_last_save: 0,
         };
         let result = list.insert(ext_rec);
-        assert_eq!(result.unwrap_err(), EventManagerError::ListFullError);
+        assert_eq!(result.unwrap_err(), ExtendedRecordListError::ListFullError);
 
         assert_eq!(list.len(), 24);
         assert!(list.get_by_event_id(0).is_some());

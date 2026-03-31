@@ -4,7 +4,7 @@
 
 #[allow(unused_imports)]
 use crate::event::{CalibConfig, DebounceBehavior, DebounceType, Event, NvmConfig, SaveTrigger};
-use crate::extended_record::{EventId, EventManagerError, ExtendedRecord, ExtendedRecordList};
+use crate::extended_record::{EventId, ExtendedRecord, ExtendedRecordList, ExtendedRecordListError};
 use crate::UdsStatusByte;
 
 /// Runtime state of the EventManager.
@@ -12,6 +12,25 @@ use crate::UdsStatusByte;
 pub enum EventManagerState {
     On,
     Off,
+}
+
+/// Error type for [`EventManager`] operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventManagerError {
+    /// The provided event ID is out of bounds.
+    InvalidEventIdError,
+    /// The event step operation failed.
+    EventStepError,
+    /// The EventManager is not initialized (state is Off).
+    NotInitializedError,
+    /// An error occurred while updating the extended records storage.
+    ExtendedRecordError(ExtendedRecordListError),
+}
+
+impl From<ExtendedRecordListError> for EventManagerError {
+    fn from(err: ExtendedRecordListError) -> Self {
+        EventManagerError::ExtendedRecordError(err)
+    }
 }
 
 /// Manages a collection of [`Event`]s and their associated [`ExtendedRecord`] data.
