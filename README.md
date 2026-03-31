@@ -59,7 +59,7 @@ The UDS status byte tracks DTC state across 7 bits:
 
 ## Crates
 
-This workspace contains three crates:
+This workspace contains two crates:
 
 ### dem
 
@@ -86,17 +86,6 @@ Key components:
 - [`ConfirmatorError`] - Error types for invalid operations
 - [`ConfirmatorValue`] - Trait for types supporting confirmation
 
-### ordered_list
-
-Priority-ordered list with fixed capacity and O(log n) insertion.
-
-Key components:
-- [`OrderedList<T>`] - Owns its elements
-- [`OrderedListRef<'a, T>`] - Holds references to elements
-- [`OrderedListIdx<T>`] - Holds indices/handles to elements
-- [`HasPriority`] - Trait for types with priority value
-- [`OrderedListError`] - Error types for list operations
-
 ## Installation
 
 Add the crates you need to your `Cargo.toml`:
@@ -105,7 +94,6 @@ Add the crates you need to your `Cargo.toml`:
 [dependencies]
 dem = "0.1"
 confirmator = "0.1"
-ordered_list = "0.1"
 ```
 
 ## Usage Examples
@@ -125,7 +113,6 @@ Run tests for a specific crate:
 ```bash
 cargo test -p dem
 cargo test -p confirmator
-cargo test -p ordered_list
 ```
 
 Run documentation tests:

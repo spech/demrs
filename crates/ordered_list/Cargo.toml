@@ -1,9 +1,0 @@
-[package]
-name = "ordered_list"
-version = "0.1.0"
-edition = "2024"
-
-[lib]
-path = "src/ordered_list.rs"
-
-[dependencies]
