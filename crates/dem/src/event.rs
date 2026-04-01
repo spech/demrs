@@ -238,7 +238,7 @@ impl Event {
                             .max(1);
                             increment = div_round_i32(i32::from(i16::MAX), total_samples) as i16;
                         } else {
-                            increment = div_round(i16::MAX, increment);
+                            increment = div_ceil(i16::MAX, increment);
                         }
                         self.debounce_counter = self.debounce_counter.saturating_add(increment);
                         if self.debounce_counter == i16::MAX {
@@ -267,7 +267,7 @@ impl Event {
                             .max(1);
                             decrement = div_round_i32(i32::from(i16::MAX), total_samples) as i16;
                         } else {
-                            decrement = div_round(i16::MAX, decrement);
+                            decrement = div_ceil(i16::MAX, decrement);
                         }
                         self.debounce_counter = self.debounce_counter.saturating_sub(decrement);
                         if self.debounce_counter <= -i16::MAX {
@@ -321,11 +321,11 @@ impl Event {
     }
 }
 
-/// Rounds the division of `a` by `b` with half-up rounding.
+/// Rounds the division of `a` by `b` with ceiling.
 ///
-/// Used for calculating increments in time-based debouncing.
-fn div_round(a: i16, b: i16) -> i16 {
-    ((a as i32 + b as i32 / 2) / b as i32) as i16
+/// Used for calculating increments in counter-based debouncing.
+fn div_ceil(a: i16, b: i16) -> i16 {
+    ((a as i32 + b as i32 - 1) / b as i32) as i16
 }
 
 fn seconds_to_millis(seconds: f32) -> i32 {
@@ -370,6 +370,39 @@ mod tests {
         step_up: 1,
         step_down: 0,
         debounce_behavior: DebounceBehavior::Reset,
+        debounce_type: DebounceType::CounterBased,
+        confirmation_threshold: 1,
+        aging_threshold: 1,
+        priority: 0,
+        save_trigger: SaveTrigger::OnCdtc,
+    };
+
+    const CALIB_COUNTER_FREEZE_0_1: CalibConfig = CalibConfig {
+        step_up: 0,
+        step_down: 1,
+        debounce_behavior: DebounceBehavior::Freeze,
+        debounce_type: DebounceType::CounterBased,
+        confirmation_threshold: 1,
+        aging_threshold: 1,
+        priority: 0,
+        save_trigger: SaveTrigger::OnCdtc,
+    };
+
+    const CALIB_COUNTER_FREEZE_0_0: CalibConfig = CalibConfig {
+        step_up: 0,
+        step_down: 0,
+        debounce_behavior: DebounceBehavior::Freeze,
+        debounce_type: DebounceType::CounterBased,
+        confirmation_threshold: 1,
+        aging_threshold: 1,
+        priority: 0,
+        save_trigger: SaveTrigger::OnCdtc,
+    };
+
+    const CALIB_COUNTER_FREEZE_3_3: CalibConfig = CalibConfig {
+        step_up: 3,
+        step_down: 3,
+        debounce_behavior: DebounceBehavior::Freeze,
         debounce_type: DebounceType::CounterBased,
         confirmation_threshold: 1,
         aging_threshold: 1,
@@ -432,6 +465,28 @@ mod tests {
         save_trigger: SaveTrigger::OnCdtc,
     };
 
+    const CALIB_TIME_FREEZE_25_0: CalibConfig = CalibConfig {
+        step_up: 25,
+        step_down: 0,
+        debounce_behavior: DebounceBehavior::Freeze,
+        debounce_type: DebounceType::TimeBased,
+        confirmation_threshold: 1,
+        aging_threshold: 1,
+        priority: 0,
+        save_trigger: SaveTrigger::OnCdtc,
+    };
+
+    const CALIB_TIME_FREEZE_25_25: CalibConfig = CalibConfig {
+        step_up: 25,
+        step_down: 25,
+        debounce_behavior: DebounceBehavior::Freeze,
+        debounce_type: DebounceType::TimeBased,
+        confirmation_threshold: 1,
+        aging_threshold: 1,
+        priority: 0,
+        save_trigger: SaveTrigger::OnCdtc,
+    };
+
     fn create_cal_config(
         step_up: i16,
         step_down: i16,
@@ -442,12 +497,23 @@ mod tests {
             (1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze) => {
                 &CALIB_COUNTER_FREEZE_1_0
             }
+            (0, 1, DebounceType::CounterBased, DebounceBehavior::Freeze) => {
+                &CALIB_COUNTER_FREEZE_0_1
+            }
+            (0, 0, DebounceType::CounterBased, DebounceBehavior::Freeze) => {
+                &CALIB_COUNTER_FREEZE_0_0
+            }
+            (3, 3, DebounceType::CounterBased, DebounceBehavior::Freeze) => {
+                &CALIB_COUNTER_FREEZE_3_3
+            }
             (1, 0, DebounceType::CounterBased, DebounceBehavior::Reset) => &CALIB_COUNTER_RESET_1_0,
             (1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_1_0,
             (0, 1, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_0_1,
             (0, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_0_0,
             (2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_2_0,
             (0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_0_2,
+            (25, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_25_0,
+            (25, 25, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_25_25,
             _ => panic!(
                 "unsupported calibration: step_up={}, step_down={}, type={:?}, behavior={:?}",
                 step_up, step_down, debounce_type, debounce_behavior
@@ -566,5 +632,194 @@ mod tests {
         event.step(Status::PreFailed, true, 0.0).unwrap();
 
         assert_eq!(event.debounce_counter(), 0);
+    }
+
+    #[test]
+    fn fn_step_immediateness_when_failed() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+
+        event.step(Status::Failed, true, 0.0).unwrap();
+
+        assert_eq!(event.debounce_counter(), i16::MAX);
+        assert!(event.status().tf());
+    }
+
+    #[test]
+    fn fn_step_immediateness_when_passed() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+
+        event.step(Status::Passed, true, 0.0).unwrap();
+
+        assert_eq!(event.debounce_counter(), i16::MIN);
+        assert!(!event.status().tf());
+    }
+
+    #[test]
+    fn fn_step_immediateness_when_step_up_is_1() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+
+        event.step(Status::PreFailed, true, 0.0).unwrap();
+
+        assert_eq!(event.debounce_counter(), i16::MAX);
+        assert!(event.status().tf());
+    }
+
+    #[test]
+    fn fn_step_immediateness_when_step_down_is_1() {
+        let mut event = create_event(0, 1, DebounceType::CounterBased, DebounceBehavior::Freeze);
+
+        event.step(Status::PrePassed, true, 0.0).unwrap();
+
+        assert_eq!(event.debounce_counter(), i16::MIN);
+        assert!(!event.status().tf());
+    }
+
+    #[test]
+    fn fn_step_hold_when_step_up_is_0() {
+        let mut event = create_event(0, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+
+        event.step(Status::PreFailed, true, 0.0).unwrap();
+
+        assert_eq!(event.debounce_counter(), 0);
+        assert!(!event.status().tf());
+    }
+
+    #[test]
+    fn fn_step_hold_when_step_down_is_0() {
+        let mut event = create_event(0, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+
+        event.step(Status::PrePassed, true, 0.0).unwrap();
+
+        assert_eq!(event.debounce_counter(), 0);
+        assert!(!event.status().tf());
+    }
+
+    #[test]
+    fn fn_step_conterbased_confirm_3_steps_when_step_up_is_3() {
+        let cal = create_cal_config(3, 3, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        let nvm = create_nvm_config();
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: nvm,
+            cal_config: cal,
+        };
+
+        for _ in 0..3 {
+            event.step(Status::PreFailed, true, 0.0).unwrap();
+        }
+
+        assert_eq!(event.debounce_counter(), i16::MAX);
+        assert!(event.status().tf());
+    }
+
+    #[test]
+    fn fn_step_conterbased_heal_3_steps_when_step_down_is_3() {
+        let cal = create_cal_config(3, 3, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        let nvm = create_nvm_config();
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: nvm,
+            cal_config: cal,
+        };
+
+        for _ in 0..3 {
+            event.step(Status::PrePassed, true, 0.0).unwrap();
+        }
+
+        assert_eq!(event.debounce_counter(), i16::MIN);
+        assert!(!event.status().tf());
+    }
+
+    #[test]
+    fn fn_step_timebased_error_with_sampling_is_0() {
+        let mut event = create_event(1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
+
+        let result = event.step(Status::PreFailed, true, 0.0);
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), EventError::InvalidSampling);
+    }
+
+    #[test]
+    fn fn_step_prefailed_to_prepassed_starts_from_0() {
+        let cal = create_cal_config(3, 3, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        let nvm = create_nvm_config();
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: nvm,
+            cal_config: cal,
+        };
+
+        event.step(Status::PreFailed, true, 0.0).unwrap();
+        assert!(event.debounce_counter() > 0);
+
+        event.step(Status::PrePassed, true, 0.0).unwrap();
+        assert_eq!(event.debounce_counter(), -10923);
+    }
+
+    #[test]
+    fn fn_step_prepassed_to_prefailed_starts_from_0() {
+        let cal = create_cal_config(3, 3, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        let nvm = create_nvm_config();
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: nvm,
+            cal_config: cal,
+        };
+
+        event.step(Status::PrePassed, true, 0.0).unwrap();
+        assert!(event.debounce_counter() < 0);
+
+        event.step(Status::PreFailed, true, 0.0).unwrap();
+        assert_eq!(event.debounce_counter(), 10923);
+    }
+
+    #[test]
+    fn fn_step_timebased_at_10ms_confirm_in_3_steps_when_step_is_25() {
+        let cal = create_cal_config(25, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
+        let nvm = create_nvm_config();
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: nvm,
+            cal_config: cal,
+        };
+
+        for _ in 0..3 {
+            event.step(Status::PreFailed, true, 0.01).unwrap();
+        }
+
+        assert_eq!(event.debounce_counter(), 39);
+        assert!(!event.status().tf());
+    }
+
+    #[test]
+    fn fn_step_timebased_at_10ms_heal_in_3_steps_when_step_is_25() {
+        let cal = create_cal_config(25, 25, DebounceType::TimeBased, DebounceBehavior::Freeze);
+        let nvm = create_nvm_config();
+        nvm.uds_status.set_tf(true);
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: nvm,
+            cal_config: cal,
+        };
+
+        for _ in 0..3 {
+            event.step(Status::PrePassed, true, 0.01).unwrap();
+        }
+
+        assert_eq!(event.debounce_counter(), -39);
+        assert!(event.status().tf());
     }
 }
