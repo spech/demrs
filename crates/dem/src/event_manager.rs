@@ -3,7 +3,9 @@
 // ─────────────────────────────────────────────
 
 #[allow(unused_imports)]
-use crate::event::{CalibConfig, DebounceBehavior, DebounceType, Event, NvmConfig, SaveTrigger};
+use crate::event::{Event, NvmConfig};
+#[allow(unused_imports)]
+use crate::event_config::{CalibConfig, DebounceBehavior, DebounceType, SaveTrigger};
 use crate::extended_record::{
     EventId, ExtendedRecord, ExtendedRecordList, ExtendedRecordListError,
 };
