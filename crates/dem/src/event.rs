@@ -424,6 +424,17 @@ mod tests {
         save_trigger: SaveTrigger::OnCdtc,
     };
 
+    const CALIB_COUNTER_FREEZE_1_0_P5: CalibConfig = CalibConfig {
+        step_up: 1,
+        step_down: 0,
+        debounce_behavior: DebounceBehavior::Freeze,
+        debounce_type: DebounceType::CounterBased,
+        confirmation_threshold: 0,
+        aging_threshold: 1,
+        priority: 5,
+        save_trigger: SaveTrigger::OnCdtc,
+    };
+
     const CALIB_COUNTER_RESET_1_0: CalibConfig = CalibConfig {
         step_up: 1,
         step_down: 0,
@@ -554,6 +565,58 @@ mod tests {
 
         event.disable(false);
         assert!(!event.disabled);
+    }
+
+    #[test]
+    fn event_priority_returns_calib_priority() {
+        let event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: create_nvm_config(),
+            cal_config: &CALIB_COUNTER_FREEZE_1_0_P5,
+        };
+
+        assert_eq!(event.priority(), 5);
+    }
+
+    #[test]
+    fn event_clear_resets_state() {
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: create_nvm_config(),
+            cal_config: &CALIB_COUNTER_FREEZE_1_0_P5,
+        };
+
+        event.step(Status::Failed, true, 0.0).unwrap();
+        event.nv_config.uds_status.set_pdtc(true);
+        assert!(event.status().tf());
+        assert!(event.status().tftoc());
+        assert!(event.status().pdtc());
+        assert!(event.status().cdtc());
+        assert!(event.status().tfslc());
+        assert!(!event.status().tnctoc());
+        assert!(!event.status().tncslc());
+
+        event.nv_config.occurence_cntr = 5;
+        event.nv_config.confirmation_cycles = 3;
+        event.nv_config.aging_cycles = 2;
+
+        event.clear();
+
+        assert_eq!(event.debounce_counter(), 0);
+        assert!(!event.status().tf());
+        assert!(!event.status().tftoc());
+        assert!(!event.status().pdtc());
+        assert!(!event.status().cdtc());
+        assert!(!event.status().tfslc());
+        assert!(event.status().tnctoc());
+        assert!(event.status().tncslc());
+        assert_eq!(event.nv_config.occurence_cntr, 0);
+        assert_eq!(event.nv_config.confirmation_cycles, 0);
+        assert_eq!(event.nv_config.aging_cycles, 0);
     }
 
     #[test]
