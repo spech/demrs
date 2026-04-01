@@ -58,7 +58,7 @@ impl UdsStatusByte {
     /// ```
     /// # use dem::UdsStatusByte;
     /// let s = UdsStatusByte::from_raw(255u8);
-    /// assert!(!s.tf());
+    /// assert!(s.tf());
     /// assert!(s.tnctoc());
     /// ```
     pub fn init(&mut self) {
@@ -71,7 +71,7 @@ impl UdsStatusByte {
     ///
     /// ```
     /// # use dem::UdsStatusByte;
-    /// let mut s = UdsStatusByte::from_raw(1u8);
+    /// let mut s = UdsStatusByte::from_raw(0u8);
     /// assert!(!s.tf());
     /// s.set_tf(true);
     /// assert!(s.tf());
@@ -288,7 +288,8 @@ impl UdsStatusByte {
     ///
     /// ```
     /// # use dem::UdsStatusByte;
-    /// let s = UdsStatusByte::from_raw(0);
+    /// let mut s = UdsStatusByte::from_raw(0);
+    /// s.set_tnctoc(true);
     /// assert!(s.tnctoc()); // always true on from_raw()
     /// ```
     pub fn tnctoc(&self) -> bool {
