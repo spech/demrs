@@ -544,6 +544,19 @@ mod tests {
     }
 
     #[test]
+    fn event_disabled_field_setting() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+
+        assert!(!event.disabled);
+
+        event.disable(true);
+        assert!(event.disabled);
+
+        event.disable(false);
+        assert!(!event.disabled);
+    }
+
+    #[test]
     fn event_step_active_true_updates_state() {
         let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
 
@@ -565,8 +578,6 @@ mod tests {
         assert_eq!(event.status(), old_status);
         assert_eq!(result, old_status);
     }
-
-
 
     #[test]
     fn event_step_active_false_with_reset_behavior_resets_counter() {
@@ -714,5 +725,4 @@ mod tests {
         assert!(event.status().tnctoc());
         assert_eq!(result, event.status());
     }
- 
 }

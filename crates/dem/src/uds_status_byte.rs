@@ -341,7 +341,7 @@ impl UdsStatusByte {
     /// assert!(s.tncslc());
     /// ```
     pub fn clear(&mut self) {
-        self.0 = 0b0101_0000;
+        self.0 = Self::TNCTOC_BIT | Self::TNCSLC_BIT;
     }
 }
 
