@@ -105,8 +105,8 @@ pub struct Event {
     pub disabled: bool,
     /// Reference to non-volatile configuration.
     pub nv_config: &'static mut NvmConfig,
-    /// Reference to calibration configuration.
-    pub cal_config: &'static CalibConfig,
+    /// Calibration configuration.
+    pub cal_config: CalibConfig,
 }
 
 impl Event {
@@ -344,180 +344,21 @@ fn div_round_i32(a: i32, b: i32) -> i32 {
 mod tests {
     use super::*;
 
-    const CALIB_COUNTER_FREEZE_1_0: CalibConfig = CalibConfig {
-        step_up: 1,
-        step_down: 0,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::CounterBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_COUNTER_FREEZE_1_0_P5: CalibConfig = CalibConfig {
-        step_up: 1,
-        step_down: 0,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::CounterBased,
-        confirmation_threshold: 0,
-        aging_threshold: 1,
-        priority: 5,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_COUNTER_RESET_1_0: CalibConfig = CalibConfig {
-        step_up: 1,
-        step_down: 0,
-        debounce_behavior: DebounceBehavior::Reset,
-        debounce_type: DebounceType::CounterBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_COUNTER_FREEZE_0_1: CalibConfig = CalibConfig {
-        step_up: 0,
-        step_down: 1,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::CounterBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_COUNTER_FREEZE_0_0: CalibConfig = CalibConfig {
-        step_up: 0,
-        step_down: 0,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::CounterBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_COUNTER_FREEZE_3_3: CalibConfig = CalibConfig {
-        step_up: 3,
-        step_down: 3,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::CounterBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_TIME_FREEZE_1_0: CalibConfig = CalibConfig {
-        step_up: 1,
-        step_down: 0,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::TimeBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_TIME_FREEZE_0_1: CalibConfig = CalibConfig {
-        step_up: 0,
-        step_down: 1,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::TimeBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_TIME_FREEZE_0_0: CalibConfig = CalibConfig {
-        step_up: 0,
-        step_down: 0,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::TimeBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_TIME_FREEZE_2_0: CalibConfig = CalibConfig {
-        step_up: 2,
-        step_down: 0,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::TimeBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_TIME_FREEZE_0_2: CalibConfig = CalibConfig {
-        step_up: 0,
-        step_down: 2,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::TimeBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_TIME_FREEZE_25_0: CalibConfig = CalibConfig {
-        step_up: 25,
-        step_down: 0,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::TimeBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
-    const CALIB_TIME_FREEZE_25_25: CalibConfig = CalibConfig {
-        step_up: 25,
-        step_down: 25,
-        debounce_behavior: DebounceBehavior::Freeze,
-        debounce_type: DebounceType::TimeBased,
-        confirmation_threshold: 1,
-        aging_threshold: 1,
-        priority: 0,
-        save_trigger: SaveTrigger::OnCdtc,
-    };
-
     fn create_cal_config(
         step_up: i16,
         step_down: i16,
         debounce_type: DebounceType,
         debounce_behavior: DebounceBehavior,
-    ) -> &'static CalibConfig {
-        match (step_up, step_down, debounce_type, debounce_behavior) {
-            (1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze) => {
-                &CALIB_COUNTER_FREEZE_1_0
-            }
-            (0, 1, DebounceType::CounterBased, DebounceBehavior::Freeze) => {
-                &CALIB_COUNTER_FREEZE_0_1
-            }
-            (0, 0, DebounceType::CounterBased, DebounceBehavior::Freeze) => {
-                &CALIB_COUNTER_FREEZE_0_0
-            }
-            (3, 3, DebounceType::CounterBased, DebounceBehavior::Freeze) => {
-                &CALIB_COUNTER_FREEZE_3_3
-            }
-            (1, 0, DebounceType::CounterBased, DebounceBehavior::Reset) => &CALIB_COUNTER_RESET_1_0,
-            (1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_1_0,
-            (0, 1, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_0_1,
-            (0, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_0_0,
-            (2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_2_0,
-            (0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_0_2,
-            (25, 0, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_25_0,
-            (25, 25, DebounceType::TimeBased, DebounceBehavior::Freeze) => &CALIB_TIME_FREEZE_25_25,
-            _ => panic!(
-                "unsupported calibration: step_up={}, step_down={}, type={:?}, behavior={:?}",
-                step_up, step_down, debounce_type, debounce_behavior
-            ),
+    ) -> CalibConfig {
+        CalibConfig {
+            step_up,
+            step_down,
+            debounce_type,
+            debounce_behavior,
+            confirmation_threshold: 1,
+            aging_threshold: 1,
+            priority: 0,
+            save_trigger: SaveTrigger::OnCdtc,
         }
     }
 
@@ -566,12 +407,22 @@ mod tests {
 
     #[test]
     fn fn_priority_returns_calib_config_priority() {
+        let cal_config = CalibConfig {
+            step_up: 1,
+            step_down: 0,
+            debounce_behavior: DebounceBehavior::Freeze,
+            debounce_type: DebounceType::CounterBased,
+            confirmation_threshold: 1,
+            aging_threshold: 1,
+            priority: 5,
+            save_trigger: SaveTrigger::OnCdtc,
+        };
         let event = Event {
             debounce_counter: 0,
             uds_status_old: UdsStatusByte::new(0),
             disabled: false,
             nv_config: create_nvm_config(),
-            cal_config: &CALIB_COUNTER_FREEZE_1_0_P5,
+            cal_config,
         };
 
         assert_eq!(event.priority(), 5);
@@ -579,12 +430,22 @@ mod tests {
 
     #[test]
     fn fn_clear_resets_all_state() {
+        let cal_config = CalibConfig {
+            step_up: 1,
+            step_down: 0,
+            debounce_behavior: DebounceBehavior::Freeze,
+            debounce_type: DebounceType::CounterBased,
+            confirmation_threshold: 0,
+            aging_threshold: 1,
+            priority: 0,
+            save_trigger: SaveTrigger::OnCdtc,
+        };
         let mut event = Event {
             debounce_counter: 0,
             uds_status_old: UdsStatusByte::new(0),
             disabled: false,
             nv_config: create_nvm_config(),
-            cal_config: &CALIB_COUNTER_FREEZE_1_0_P5,
+            cal_config,
         };
 
         event.step(Status::Failed, true, 0.0).unwrap();
@@ -618,12 +479,13 @@ mod tests {
 
     #[test]
     fn fn_step_resets_when_event_behavior_is_reset_disabled() {
+        let cal = create_cal_config(1, 0, DebounceType::CounterBased, DebounceBehavior::Reset);
         let mut event = Event {
             debounce_counter: 0,
             uds_status_old: UdsStatusByte::new(0),
             disabled: false,
             nv_config: create_nvm_config(),
-            cal_config: &CALIB_COUNTER_RESET_1_0,
+            cal_config: cal,
         };
 
         event.debounce_counter = 5000;

@@ -35,7 +35,7 @@ pub enum SaveTrigger {
 ///
 /// This struct holds step counts, debounce behavior, and type,
 /// allowing a single configuration to be shared across multiple events.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct CalibConfig {
     /// Number of `PreFailed` ticks to reach `i16::MAX`.
     /// - `0`: Counter unchanged (no debouncing).

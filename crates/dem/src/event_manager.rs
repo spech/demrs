@@ -206,8 +206,8 @@ mod tests {
         debounce_behavior: DebounceBehavior,
         priority: u8,
         save_trigger: SaveTrigger,
-    ) -> &'static CalibConfig {
-        Box::leak(Box::new(CalibConfig {
+    ) -> CalibConfig {
+        CalibConfig {
             step_up,
             step_down,
             debounce_behavior,
@@ -216,7 +216,7 @@ mod tests {
             aging_threshold: aging_thr,
             priority,
             save_trigger,
-        }))
+        }
     }
 
     fn create_nvm_config(
@@ -243,7 +243,7 @@ mod tests {
     fn create_event(
         _event_id: EventId,
         nv_config: &'static mut NvmConfig,
-        cal_config: &'static CalibConfig,
+        cal_config: CalibConfig,
     ) -> Event {
         Event {
             debounce_counter: 0,

@@ -40,7 +40,7 @@ pub mod {{ fixture.module_name }} {
             uds_status_old: UdsStatusByte::from_raw({{ event.nvm.raw_status }}),
             disabled: false,
             nv_config: unsafe { &mut *core::ptr::addr_of_mut!(NVM_CONFIG_{{ loop.index0 }}) },
-            cal_config: &CALIB_CONFIG_{{ loop.index0 }},
+            cal_config: CALIB_CONFIG_{{ loop.index0 }},
         },
 {% endfor %}
     ];

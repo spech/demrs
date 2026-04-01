@@ -32,7 +32,7 @@ fn extended_record_list_full_evicts_lowest_priority() {
 
 #[test]
 fn save_trigger_onpdtc_creates_extended_record_on_pdtc_rising() {
-    let cal_config = Box::leak(Box::new(CalibConfig {
+    let cal_config = CalibConfig {
         step_up: 1,
         step_down: 0,
         debounce_behavior: DebounceBehavior::Freeze,
@@ -41,7 +41,7 @@ fn save_trigger_onpdtc_creates_extended_record_on_pdtc_rising() {
         aging_threshold: 1,
         priority: 10,
         save_trigger: SaveTrigger::OnPdtc,
-    }));
+    };
 
     let mut uds = UdsStatusByte::new(0);
     uds.set_tnctoc(true);
@@ -83,7 +83,7 @@ fn save_trigger_onpdtc_creates_extended_record_on_pdtc_rising() {
 
 #[test]
 fn save_trigger_oncdtc_creates_extended_record_on_cdtc_rising() {
-    let cal_config = Box::leak(Box::new(CalibConfig {
+    let cal_config = CalibConfig {
         step_up: 1,
         step_down: 0,
         debounce_behavior: DebounceBehavior::Freeze,
@@ -92,7 +92,7 @@ fn save_trigger_oncdtc_creates_extended_record_on_cdtc_rising() {
         aging_threshold: 1,
         priority: 10,
         save_trigger: SaveTrigger::OnCdtc,
-    }));
+    };
 
     let mut uds = UdsStatusByte::new(0);
     uds.set_tnctoc(true);
