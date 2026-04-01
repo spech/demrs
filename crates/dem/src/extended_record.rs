@@ -285,7 +285,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extended_record_list_insert_full_returns_error() {
+    fn fn_insert_full_returns_error() {
         let mut list = ExtendedRecordList::new();
 
         for i in 0..24 {
@@ -317,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn extended_record_list_remove_out_of_bounds_returns_none() {
+    fn fn_remove_out_of_bounds_returns_none() {
         let mut list = ExtendedRecordList::new();
 
         let result = list.remove(0);
@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn extended_record_list_remove_by_priority() {
+    fn fn_remove_by_priority() {
         let mut list = ExtendedRecordList::new();
 
         for (i, &priority) in [5, 10, 15].iter().enumerate() {
@@ -366,7 +366,7 @@ mod tests {
     }
 
     #[test]
-    fn extended_record_list_find_lowest_priority() {
+    fn fn_find_lowest_priority() {
         let mut list = ExtendedRecordList::new();
 
         for (i, &priority) in [10, 5, 15].iter().enumerate() {

@@ -181,7 +181,7 @@ mod tests {
     // ── Confirmator ──────────────────────────
 
     #[test]
-    fn confirmator_u8_default_step() {
+    fn fn_step_u8_default() {
         let mut c: Confirmator<u8> = Confirmator::new();
         for _ in 0..2 {
             assert!(!c.step(true, 1, 3).unwrap());
@@ -191,7 +191,7 @@ mod tests {
     }
 
     #[test]
-    fn confirmator_u8_resets_on_false() {
+    fn fn_step_u8_resets_on_false() {
         let mut c: Confirmator<u8> = Confirmator::new();
         assert!(!c.step(true, 1, 3).unwrap());
         assert_ne!(c.debounce_counter(), 0);
@@ -200,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn confirmator_f32_default_step() {
+    fn fn_step_f32_default() {
         let mut c: Confirmator<f32> = Confirmator::new();
         assert!(!c.step(true, 1.0, 3.0).unwrap());
         assert!(!c.step(true, 1.0, 3.0).unwrap());
@@ -208,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn confirmator_f32_resets_on_false() {
+    fn fn_step_f32_resets_on_false() {
         let mut c: Confirmator<f32> = Confirmator::new();
         let _ = c.step(true, 1.0, 3.0);
         let _ = c.step(true, 1.0, 3.0);
@@ -218,21 +218,21 @@ mod tests {
     }
 
     #[test]
-    fn confirmator_f32_immediateness() {
+    fn fn_step_f32_immediateness() {
         let mut c: Confirmator<f32> = Confirmator::new();
         assert!(c.step(true, 1.0, 0.0).unwrap());
         assert!(!c.step(false, 1.0, 0.0).unwrap());
     }
 
     #[test]
-    fn confirmator_f32_saturate_to_max() {
+    fn fn_step_f32_saturates_to_max() {
         let mut c: Confirmator<f32> = Confirmator::new();
         assert!(c.step(true, f32::MAX, 3.0).unwrap());
         assert_eq!(c.debounce_counter(), 3.0);
     }
 
     #[test]
-    fn confirmator_negative_confirmation() {
+    fn fn_step_negative_confirmation_returns_error() {
         let mut c: Confirmator<f32> = Confirmator::new();
         assert_eq!(
             c.step(true, 1.0, -1.0),
@@ -243,7 +243,7 @@ mod tests {
     // ── u16 tests ────────────────────────────
 
     #[test]
-    fn confirmator_u16_default_step() {
+    fn fn_step_u16_default() {
         let mut c: Confirmator<u16> = Confirmator::new();
         for _ in 0..2 {
             assert!(!c.step(true, 1, 3).unwrap());
@@ -253,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn confirmator_u16_resets_on_false() {
+    fn fn_step_u16_resets_on_false() {
         let mut c: Confirmator<u16> = Confirmator::new();
         assert!(!c.step(true, 1, 3).unwrap());
         assert_ne!(c.debounce_counter(), 0);
@@ -262,14 +262,14 @@ mod tests {
     }
 
     #[test]
-    fn confirmator_u16_saturate_to_max() {
+    fn fn_step_u16_saturates_to_max() {
         let mut c: Confirmator<u16> = Confirmator::new();
         assert!(c.step(true, u16::MAX, 3).unwrap());
         assert_eq!(c.debounce_counter(), 3);
     }
 
     #[test]
-    fn confirmator_u16_immediateness() {
+    fn fn_step_u16_immediateness() {
         let mut c: Confirmator<u16> = Confirmator::new();
         assert!(c.step(true, 1, 0).unwrap());
         assert!(!c.step(false, 1, 0).unwrap());
@@ -278,7 +278,7 @@ mod tests {
     // ── u32 tests ────────────────────────────
 
     #[test]
-    fn confirmator_u32_default_step() {
+    fn fn_step_u32_default() {
         let mut c: Confirmator<u32> = Confirmator::new();
         for _ in 0..2 {
             assert!(!c.step(true, 1, 3).unwrap());
@@ -288,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn confirmator_u32_resets_on_false() {
+    fn fn_step_u32_resets_on_false() {
         let mut c: Confirmator<u32> = Confirmator::new();
         assert!(!c.step(true, 1, 3).unwrap());
         assert_ne!(c.debounce_counter(), 0);
@@ -299,7 +299,7 @@ mod tests {
     // ── Edge case: already confirmed path ─────
 
     #[test]
-    fn confirmator_already_confirmed_continues_true() {
+    fn fn_step_already_confirmed_continues_true() {
         let mut c: Confirmator<u8> = Confirmator::new();
         assert!(!c.step(true, 1, 3).unwrap());
         assert!(!c.step(true, 1, 3).unwrap());

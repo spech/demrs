@@ -356,7 +356,7 @@ mod tests {
     // ── UdsStatusByte ──────────────────────────
 
     #[test]
-    fn status_flags_initial_tf_false_tnctoc_true() {
+    fn fn_new_initial_tf_false_tnctoc_true() {
         let s = UdsStatusByte::new(255u8);
         assert!(!s.tf());
         assert!(!s.tftoc());
@@ -364,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_tf_and_clear_tnctoc_permanently() {
+    fn fn_set_tf_clears_tnctoc_permanently() {
         let mut s = UdsStatusByte::new(0);
         s.set_tf(true);
         assert!(s.tf());
@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_tf_then_tftoc_and_pdtc_latches_permanently() {
+    fn fn_set_tf_sets_tftoc_and_pdtc_permanently() {
         let mut s = UdsStatusByte::new(0);
         s.set_tf(true); // tftoc and tfslc latch
         assert!(s.tftoc());
@@ -386,7 +386,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_tf_and_tfslc_latches_permanently() {
+    fn fn_set_tf_sets_tfslc_permanently() {
         let mut s = UdsStatusByte::new(0);
         s.set_tf(true); // tftoc and tfslc latch
         assert!(s.tfslc());
@@ -396,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_clear() {
+    fn fn_clear() {
         let mut s = UdsStatusByte::new(255u8);
         assert_ne!(s.raw(), UdsStatusByte::TNCTOC_BIT);
         s.clear();
@@ -404,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_cdtc() {
+    fn fn_set_cdtc() {
         let mut s = UdsStatusByte::new(0);
         assert!(!s.cdtc());
         s.set_cdtc(true);
@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_cdtc_resets_pdtc() {
+    fn fn_set_cdtc_resets_pdtc() {
         let mut s = UdsStatusByte::new(0);
         s.set_pdtc(true);
         assert!(s.pdtc());
@@ -424,7 +424,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_clear_resets_cdtc() {
+    fn fn_clear_resets_cdtc() {
         let mut s = UdsStatusByte::new(0);
         s.set_cdtc(true);
         assert!(s.cdtc());
@@ -433,7 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_pdtc_unit() {
+    fn fn_set_pdtc() {
         let mut s = UdsStatusByte::new(0);
         assert!(!s.pdtc());
         s.set_pdtc(true);
@@ -443,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_tftoc_unit() {
+    fn fn_set_tftoc() {
         let mut s = UdsStatusByte::new(0);
         assert!(!s.tftoc());
         s.set_tftoc(true);
@@ -454,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_tfslc_unit() {
+    fn fn_set_tfslc() {
         let mut s = UdsStatusByte::new(0);
         assert!(!s.tfslc());
         s.set_tfslc(true);
@@ -464,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_tncslc_unit() {
+    fn fn_set_tncslc() {
         let mut s = UdsStatusByte::new(0);
         assert!(!s.tncslc());
         s.set_tncslc(true);
@@ -474,7 +474,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_set_tnctoc_unit() {
+    fn fn_set_tnctoc() {
         let mut s = UdsStatusByte::new(0);
         // new() sets tnctoc to true
         assert!(s.tnctoc());
@@ -488,7 +488,7 @@ mod tests {
     }
 
     #[test]
-    fn status_flags_new_with_mask() {
+    fn fn_new_with_mask() {
         // Test that new() respects mask for non-forced bits
         let s = UdsStatusByte::new(0b0000_1000); // bit 3 (cdtc) set
         assert!(s.cdtc());

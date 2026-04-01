@@ -486,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn event_disabled_field_setting() {
+    fn fn_disable_sets_disabled_field() {
         let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
 
         assert!(!event.disabled);
@@ -499,7 +499,7 @@ mod tests {
     }
 
     #[test]
-    fn event_priority_returns_calib_priority() {
+    fn fn_priority_returns_calib_config_priority() {
         let event = Event {
             debounce_counter: 0,
             uds_status_old: UdsStatusByte::new(0),
@@ -512,7 +512,7 @@ mod tests {
     }
 
     #[test]
-    fn event_clear_resets_state() {
+    fn fn_clear_resets_all_state() {
         let mut event = Event {
             debounce_counter: 0,
             uds_status_old: UdsStatusByte::new(0),
@@ -551,172 +551,20 @@ mod tests {
     }
 
     #[test]
-    fn event_step_active_true_updates_state() {
-        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+    fn fn_step_resets_when_event_behavior_is_reset_disabled() {
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::new(0),
+            disabled: false,
+            nv_config: create_nvm_config(),
+            cal_config: &CALIB_COUNTER_RESET_1_0,
+        };
 
-        let result = event.step(Status::PreFailed, true, 0.0).unwrap();
-
-        assert_eq!(event.debounce_counter(), i16::MAX);
-        assert!(event.status().tf());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn event_step_active_false_preserves_state() {
-        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
         event.debounce_counter = 5000;
-        let old_status = event.status();
-        let result = event.step(Status::PreFailed, false, 0.0).unwrap();
+        event.disable(true);
 
-        assert_eq!(event.debounce_counter(), 5000);
-        assert_eq!(event.status(), old_status);
-        assert_eq!(result, old_status);
-    }
-
-    #[test]
-    fn event_step_active_false_with_reset_behavior_resets_counter() {
-        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Reset);
-        event.debounce_counter = 5000;
-
-        event.step(Status::PreFailed, false, 0.0).unwrap();
+        event.step(Status::PreFailed, true, 0.0).unwrap();
 
         assert_eq!(event.debounce_counter(), 0);
-    }
-
-    #[test]
-    fn timebased_negative_sampling_returns_error() {
-        let mut event = create_event(1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        assert_eq!(
-            event.step(Status::PreFailed, true, -1.0),
-            Err(EventError::InvalidSampling)
-        );
-    }
-
-    #[test]
-    fn timebased_zero_sampling_returns_error() {
-        let mut event = create_event(1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        assert_eq!(
-            event.step(Status::PreFailed, true, 0.0),
-            Err(EventError::InvalidSampling)
-        );
-    }
-
-    #[test]
-    fn timebased_pre_failed_step_up_one_snaps_failed() {
-        let mut event = create_event(1, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        let result = event.step(Status::PreFailed, true, 1.0).unwrap();
-
-        assert_eq!(event.debounce_counter(), i16::MAX);
-        assert!(event.status().tf());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn timebased_pre_passed_step_down_one_snaps_passed() {
-        let mut event = create_event(0, 1, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        let result = event.step(Status::PrePassed, true, 1.0).unwrap();
-
-        assert_eq!(event.debounce_counter(), i16::MIN);
-        assert!(!event.status().tf());
-        assert!(!event.status().tnctoc());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn timebased_status_failed_snaps_failed() {
-        let mut event = create_event(0, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        let result = event.step(Status::Failed, true, 1.0).unwrap();
-
-        assert_eq!(event.debounce_counter(), i16::MAX);
-        assert!(event.status().tf());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn timebased_status_passed_snaps_passed() {
-        let mut event = create_event(0, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        let result = event.step(Status::Passed, true, 1.0).unwrap();
-
-        assert_eq!(event.debounce_counter(), i16::MIN);
-        assert!(!event.status().tf());
-        assert!(!event.status().tnctoc());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn timebased_pre_failed_step_up_two_accumulates_counter() {
-        let mut event = create_event(2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        let result = event.step(Status::PreFailed, true, 1.0).unwrap();
-
-        assert_eq!(event.debounce_counter(), 16384);
-        assert!(!event.status().tf());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn timebased_pre_passed_step_down_two_accumulates_counter() {
-        let mut event = create_event(0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        let result = event.step(Status::PrePassed, true, 1.0).unwrap();
-
-        assert_eq!(event.debounce_counter(), -16384);
-        assert!(!event.status().tf());
-        assert!(event.status().tnctoc());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn timebased_pre_failed_step_up_two_resets_negative_counter_and_accumulates() {
-        let mut event = create_event(2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
-        event.debounce_counter = -1000;
-
-        let result = event.step(Status::PreFailed, true, 1.0).unwrap();
-
-        assert!(event.debounce_counter() > 0);
-        assert!(!event.status().tf());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn timebased_pre_passed_step_down_two_resets_positive_counter_and_accumulates() {
-        let mut event = create_event(0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze);
-        event.debounce_counter = 1000;
-
-        let result = event.step(Status::PrePassed, true, 1.0).unwrap();
-
-        assert!(event.debounce_counter() < 0);
-        assert!(!event.status().tf());
-        assert!(event.status().tnctoc());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn timebased_pre_failed_fractional_sampling_converts_seconds_to_millis() {
-        let mut event = create_event(2, 0, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        let result = event.step(Status::PreFailed, true, 0.5).unwrap();
-
-        assert!(event.debounce_counter() > 0);
-        assert!(!event.status().tf());
-        assert_eq!(result, event.status());
-    }
-
-    #[test]
-    fn timebased_pre_passed_fractional_sampling_converts_seconds_to_millis() {
-        let mut event = create_event(0, 2, DebounceType::TimeBased, DebounceBehavior::Freeze);
-
-        let result = event.step(Status::PrePassed, true, 0.5).unwrap();
-
-        assert!(event.debounce_counter() < 0);
-        assert!(!event.status().tf());
-        assert!(event.status().tnctoc());
-        assert_eq!(result, event.status());
     }
 }

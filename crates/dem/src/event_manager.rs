@@ -259,7 +259,7 @@ mod tests {
     // ────────────────────────────────────────────
 
     #[test]
-    fn event_manager_step_success() {
+    fn fn_step_success() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -294,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_init_calls_all_events() {
+    fn fn_init_calls_all_events() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -348,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_stop_calls_all_events() {
+    fn fn_stop_calls_all_events() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -383,7 +383,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_free_from_extended_records() {
+    fn fn_free_from_extended_records() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -432,7 +432,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_step_invalid_id() {
+    fn fn_step_invalid_id_returns_error() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -467,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_step_event_error() {
+    fn fn_step_event_error_propagates() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -502,7 +502,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_step_returns_error_when_state_off() {
+    fn fn_step_returns_error_when_state_off() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -536,7 +536,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_step_succeeds_after_init() {
+    fn fn_step_succeeds_after_init() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -571,7 +571,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_rising_edge_creates_extended_record() {
+    fn fn_rising_edge_creates_extended_record() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -611,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_no_rising_edge_no_extended_record() {
+    fn fn_no_rising_edge_no_extended_record() {
         let c_cfg = create_cal_config(
             0,
             0,
@@ -649,7 +649,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_extended_record_no_update_without_rising_edge() {
+    fn fn_extended_record_no_update_without_rising_edge() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -696,7 +696,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_extended_record_reinsert_on_rising_edge_after_stop() {
+    fn fn_extended_record_reinsert_on_rising_edge_after_stop() {
         let c_cfg = create_cal_config(
             1,
             0,
@@ -752,7 +752,7 @@ mod tests {
     }
 
     #[test]
-    fn event_manager_extended_records_list_full_replaces_lowest_priority() {
+    fn fn_extended_records_list_full_replaces_lowest_priority() {
         let mut events_vec: Vec<Event> = Vec::with_capacity(25);
 
         for i in 0..25u8 {
