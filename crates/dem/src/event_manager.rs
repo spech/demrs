@@ -227,7 +227,7 @@ mod tests {
         tnctoc: bool,
         cdtc: bool,
     ) -> &'static mut NvmConfig {
-        let mut uds = UdsStatusByte::new(0);
+        let mut uds = UdsStatusByte::from_raw(0);
         uds.set_tftoc(tftoc);
         uds.set_tnctoc(tnctoc);
         uds.set_cdtc(cdtc);
@@ -247,7 +247,7 @@ mod tests {
     ) -> Event {
         Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config,
             cal_config,
@@ -313,14 +313,14 @@ mod tests {
 
         let event1 = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: n_cfg1,
             cal_config: c_cfg,
         };
         let event2 = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: n_cfg2,
             cal_config: c_cfg,

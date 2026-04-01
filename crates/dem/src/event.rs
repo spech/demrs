@@ -123,8 +123,8 @@ impl Event {
     ///
     /// Resets `tf` (test failed) to false and sets `tnctoc` (test not complete this operating cycle) to true.
     pub fn init(&mut self) {
-        self.nv_config.uds_status.clear();
-        self.uds_status_old.clear();
+        self.nv_config.uds_status.init();
+        self.uds_status_old.init();
         self.reset_counter();
         self.disabled = false;
     }
@@ -163,7 +163,9 @@ impl Event {
     /// Resets `debounce_counter` to zero, sets `tf` to `false`, `tnctoc` and `tncslc` to `true`,
     /// clears `tfslc`, and resets occurrence counters. Preserves `tftoc`.
     pub fn clear(&mut self) {
-        self.init();
+        self.nv_config.uds_status.clear();
+        self.reset_counter();
+        self.uds_status_old = self.nv_config.uds_status;
         self.nv_config.occurence_cntr = 0u8;
         self.nv_config.confirmation_cycles = 0u8;
         self.nv_config.aging_cycles = 0u8;
@@ -363,8 +365,7 @@ mod tests {
     }
 
     fn create_nvm_config() -> &'static mut NvmConfig {
-        let mut uds = UdsStatusByte::new(0);
-        uds.set_tnctoc(true);
+        let uds = UdsStatusByte::from_raw(0b0100_0000);
 
         Box::leak(Box::new(NvmConfig {
             uds_status: uds,
@@ -419,7 +420,7 @@ mod tests {
         };
         let event = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: create_nvm_config(),
             cal_config,
@@ -442,12 +443,12 @@ mod tests {
         };
         let mut event = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: create_nvm_config(),
             cal_config,
         };
-
+        event.init();
         event.step(Status::Failed, true, 0.0).unwrap();
         event.nv_config.uds_status.set_pdtc(true);
         assert!(event.status().tf());
@@ -482,7 +483,7 @@ mod tests {
         let cal = create_cal_config(1, 0, DebounceType::CounterBased, DebounceBehavior::Reset);
         let mut event = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: create_nvm_config(),
             cal_config: cal,
@@ -562,7 +563,7 @@ mod tests {
         let nvm = create_nvm_config();
         let mut event = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: nvm,
             cal_config: cal,
@@ -582,7 +583,7 @@ mod tests {
         let nvm = create_nvm_config();
         let mut event = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: nvm,
             cal_config: cal,
@@ -612,7 +613,7 @@ mod tests {
         let nvm = create_nvm_config();
         let mut event = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: nvm,
             cal_config: cal,
@@ -631,7 +632,7 @@ mod tests {
         let nvm = create_nvm_config();
         let mut event = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: nvm,
             cal_config: cal,
@@ -650,7 +651,7 @@ mod tests {
         let nvm = create_nvm_config();
         let mut event = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: nvm,
             cal_config: cal,
@@ -671,7 +672,7 @@ mod tests {
         nvm.uds_status.set_tf(true);
         let mut event = Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::new(0),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: nvm,
             cal_config: cal,

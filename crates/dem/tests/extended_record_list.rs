@@ -43,7 +43,7 @@ fn save_trigger_onpdtc_creates_extended_record_on_pdtc_rising() {
         save_trigger: SaveTrigger::OnPdtc,
     };
 
-    let mut uds = UdsStatusByte::new(0);
+    let mut uds = UdsStatusByte::from_raw(0);
     uds.set_tnctoc(true);
 
     let nvm_config = Box::leak(Box::new(NvmConfig {
@@ -94,7 +94,7 @@ fn save_trigger_oncdtc_creates_extended_record_on_cdtc_rising() {
         save_trigger: SaveTrigger::OnCdtc,
     };
 
-    let mut uds = UdsStatusByte::new(0);
+    let mut uds = UdsStatusByte::from_raw(0);
     uds.set_tnctoc(true);
 
     let nvm_config = Box::leak(Box::new(NvmConfig {
