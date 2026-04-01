@@ -4,7 +4,9 @@
 
 #[allow(unused_imports)]
 use crate::event::{CalibConfig, DebounceBehavior, DebounceType, Event, NvmConfig, SaveTrigger};
-use crate::extended_record::{EventId, ExtendedRecord, ExtendedRecordList, ExtendedRecordListError};
+use crate::extended_record::{
+    EventId, ExtendedRecord, ExtendedRecordList, ExtendedRecordListError,
+};
 use crate::UdsStatusByte;
 
 /// Runtime state of the EventManager.

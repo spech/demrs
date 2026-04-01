@@ -167,15 +167,15 @@ pub struct NvmConfig {
 /// Create an `Event` with [`CalibConfig`] and [`NvmConfig`], then call [`step`] with status signals.
 pub struct Event {
     /// Accumulated debounce counter, positive toward Failed, negative toward Passed.
-    pub(crate) debounce_counter: i16,
+    pub debounce_counter: i16,
     /// Previous UDS status byte for detecting rising edges.
-    pub(crate) uds_status_old: UdsStatusByte,
+    pub uds_status_old: UdsStatusByte,
     /// Whether debouncing is disabled.
-    pub(crate) disabled: bool,
+    pub disabled: bool,
     /// Reference to non-volatile configuration.
-    pub(crate) nv_config: &'static mut NvmConfig,
+    pub nv_config: &'static mut NvmConfig,
     /// Reference to calibration configuration.
-    pub(crate) cal_config: &'static CalibConfig,
+    pub cal_config: &'static CalibConfig,
 }
 
 impl Event {
