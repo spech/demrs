@@ -13,10 +13,10 @@ pub mod {{ fixture.module_name }} {
 
 {% for event in fixture.events %}
     pub static mut NVM_CONFIG_{{ loop.index0 }}: NvmConfig = NvmConfig {
-        uds_status: UdsStatusByte::from_raw({{ event.nvm.raw_status }}),
-        occurence_cntr: {{ event.nvm.occurence_cntr }},
-        aging_cycles: {{ event.nvm.aging_cycles }},
-        confirmation_cycles: {{ event.nvm.confirmation_cycles }},
+        uds_status: UdsStatusByte::from_raw(0),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
     };
 
     pub static CALIB_CONFIG_{{ loop.index0 }}: CalibConfig = CalibConfig {
@@ -37,7 +37,7 @@ pub mod {{ fixture.module_name }} {
 {% for event in fixture.events %}
         Event {
             debounce_counter: 0,
-            uds_status_old: UdsStatusByte::from_raw({{ event.nvm.raw_status }}),
+            uds_status_old: UdsStatusByte::from_raw(0),
             disabled: false,
             nv_config: unsafe { &mut *core::ptr::addr_of_mut!(NVM_CONFIG_{{ loop.index0 }}) },
             cal_config: CALIB_CONFIG_{{ loop.index0 }},
@@ -57,10 +57,10 @@ pub mod {{ fixture.module_name }} {
         let em = unsafe { (&raw mut EVENT_MANAGER as *mut EventManager).as_mut().unwrap() };
 {% for event in fixture.events %}
         let cfg = unsafe { &mut *core::ptr::addr_of_mut!(NVM_CONFIG_{{ loop.index0 }}) };
-        cfg.uds_status = UdsStatusByte::from_raw({{ event.nvm.raw_status }});
-        cfg.occurence_cntr = {{ event.nvm.occurence_cntr }};
-        cfg.aging_cycles = {{ event.nvm.aging_cycles }};
-        cfg.confirmation_cycles = {{ event.nvm.confirmation_cycles }};
+        cfg.uds_status = UdsStatusByte::from_raw(0);
+        cfg.occurence_cntr = 0;
+        cfg.aging_cycles = 0;
+        cfg.confirmation_cycles = {{ event.calib.confirmation_threshold }};
 {% endfor %}
         em.clear_extended_records();
     }

@@ -3,7 +3,7 @@
 # - debounce_type: CounterBased
 # - debounce_behavior: Freeze
 # - step_up/step_down: 1 (immediate)
-# - confirmation_threshold: 3
+# - confirmation_threshold: 1
 # - aging_threshold: 10
 # - priority: id + 1 (priority 1-25, event id matches index)
 
@@ -15,15 +15,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 1
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 1
     name: "Event01"
@@ -32,15 +27,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 2
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 2
     name: "Event02"
@@ -49,15 +39,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 3
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 3
     name: "Event03"
@@ -66,15 +51,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 4
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 4
     name: "Event04"
@@ -83,15 +63,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 5
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 5
     name: "Event05"
@@ -100,15 +75,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 6
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 6
     name: "Event06"
@@ -117,15 +87,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 7
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 7
     name: "Event07"
@@ -134,15 +99,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 8
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 8
     name: "Event08"
@@ -151,15 +111,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 9
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 9
     name: "Event09"
@@ -168,15 +123,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 10
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 10
     name: "Event10"
@@ -185,15 +135,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 11
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 11
     name: "Event11"
@@ -202,15 +147,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 12
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 12
     name: "Event12"
@@ -219,15 +159,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 13
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 13
     name: "Event13"
@@ -236,15 +171,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 14
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 14
     name: "Event14"
@@ -253,15 +183,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 15
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 15
     name: "Event15"
@@ -270,15 +195,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 16
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 16
     name: "Event16"
@@ -287,15 +207,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 17
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 17
     name: "Event17"
@@ -304,15 +219,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 18
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 18
     name: "Event18"
@@ -321,15 +231,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 19
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 19
     name: "Event19"
@@ -338,15 +243,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 20
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 20
     name: "Event20"
@@ -355,15 +255,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 21
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 21
     name: "Event21"
@@ -372,15 +267,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 22
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 22
     name: "Event22"
@@ -389,15 +279,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 23
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 23
     name: "Event23"
@@ -406,15 +291,10 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 24
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 
   - id: 24
     name: "Event24"
@@ -423,13 +303,8 @@ events:
       step_down: 1
       debounce_type: CounterBased
       debounce_behavior: Freeze
-      confirmation_threshold: 3
+      confirmation_threshold: 1
       aging_threshold: 10
       priority: 25
-      save_trigger: TriggerOnCdtc
-    nvm:
-      raw_status: 0x40
-      occurence_cntr: 0
-      aging_cycles: 0
-      confirmation_cycles: 3
+      save_trigger: OnCdtc
 

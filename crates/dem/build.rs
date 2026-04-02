@@ -15,7 +15,6 @@ struct EventFixture {
     id: u16,
     name: String,
     calib: CalibFixture,
-    nvm: NvmFixture,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -27,14 +26,7 @@ struct CalibFixture {
     confirmation_threshold: u8,
     aging_threshold: u8,
     priority: u8,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct NvmFixture {
-    raw_status: u8,
-    occurence_cntr: u8,
-    aging_cycles: u8,
-    confirmation_cycles: u8,
+    save_trigger: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
