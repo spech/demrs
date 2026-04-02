@@ -69,9 +69,12 @@ pub struct LowestPriorityResult {
 ///
 /// ## Usage
 ///
-/// Create an instance with [`ExtendedRecordList::new()`], insert records
+/// Create an instance with [`ExtendedRecordList::from_nvm()`], insert records
 /// with [`ExtendedRecordList::insert()`], and access them via
 /// [`ExtendedRecordList::get_by_event_id()`] or iterators.
+///
+/// For embedded systems with NVM, the `ExtendedRecordList` should be stored
+/// in NVM to persist across power cycles.
 pub struct ExtendedRecordList {
     data: [Option<ExtendedRecord>; 24],
     len: usize,
@@ -80,23 +83,54 @@ pub struct ExtendedRecordList {
 impl ExtendedRecordList {
     const CAPACITY: usize = 24;
 
-    /// Creates a new, empty `ExtendedRecordList`.
+    /// Returns a mutable reference to the list.
     ///
     /// # Returns
     ///
-    /// A new empty list with capacity for 24 entries.
-    pub const fn new() -> Self {
-        Self {
-            data: [const { None }; 24],
-            len: 0,
-        }
-    }
-
+    /// A mutable reference to this `ExtendedRecordList`.
     pub fn as_mut(&mut self) -> &mut ExtendedRecordList {
         self
     }
 
+    /// Creates an `ExtendedRecordList` from NVM storage.
+    ///
+    /// # Arguments
+    ///
+    /// * `nvm_data` - Reference to NVM storage array
+    ///
+    /// # Returns
+    ///
+    /// A new list initialized from NVM data.
+    pub const fn from_nvm(nvm_data: &'static [Option<ExtendedRecord>; 24]) -> Self {
+        let mut len = 0;
+        let mut i = 0;
+        while i < 24 {
+            if nvm_data[i].is_some() {
+                len += 1;
+            }
+            i += 1;
+        }
+        let mut data = [const { None }; 24];
+        i = 0;
+        while i < 24 {
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    nvm_data.as_ptr().add(i),
+                    (&mut data as *mut [Option<ExtendedRecord>; 24] as *mut Option<ExtendedRecord>)
+                        .add(i),
+                    1,
+                );
+            }
+            i += 1;
+        }
+        Self { data, len }
+    }
+
     /// Returns the number of entries in the list.
+    ///
+    /// # Returns
+    ///
+    /// The number of entries currently stored in the list.
     pub fn len(&self) -> usize {
         self.len
     }
@@ -284,9 +318,16 @@ impl ExtendedRecordList {
 mod tests {
     use super::*;
 
+    impl ExtendedRecordList {
+        fn test_new() -> Self {
+            static mut NVM: [Option<ExtendedRecord>; 24] = [const { None }; 24];
+            unsafe { ExtendedRecordList::from_nvm(&*(&raw const NVM)) }
+        }
+    }
+
     #[test]
     fn fn_insert_full_returns_error() {
-        let mut list = ExtendedRecordList::new();
+        let mut list = ExtendedRecordList::test_new();
 
         for i in 0..24 {
             let ext_rec = ExtendedRecord {
@@ -317,8 +358,65 @@ mod tests {
     }
 
     #[test]
+    fn fn_insert_full_evicts_lowest_when_new_has_higher_priority() {
+        let mut list = ExtendedRecordList::test_new();
+
+        for i in 0..24 {
+            let ext_rec = ExtendedRecord {
+                event_id: i,
+                priority: 10 + i as u8,
+                date_at_first_save: 0,
+                date_at_last_save: 0,
+            };
+            list.insert(ext_rec).unwrap();
+        }
+
+        let new_rec = ExtendedRecord {
+            event_id: 99,
+            priority: 5,
+            date_at_first_save: 100,
+            date_at_last_save: 200,
+        };
+        let result = list.insert(new_rec);
+        assert!(result.is_ok());
+        assert_eq!(list.len(), 24);
+        assert!(list.is_full());
+        assert!(list.get_by_event_id(99).is_some());
+    }
+
+    #[test]
+    fn fn_is_empty_return_true_when_list_is_empty() {
+        let list = ExtendedRecordList::test_new();
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn fn_as_mut_returns_mutable_reference() {
+        let mut list = ExtendedRecordList::test_new();
+        let _ = list.as_mut();
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn fn_from_nvm_initializes_from_nvm_data() {
+        static mut NVM_DATA: [Option<ExtendedRecord>; 24] = [const { None }; 24];
+        unsafe {
+            NVM_DATA[0] = Some(ExtendedRecord {
+                event_id: 1,
+                priority: 10,
+                date_at_first_save: 100,
+                date_at_last_save: 200,
+            });
+        }
+
+        let list = unsafe { ExtendedRecordList::from_nvm(&*(&raw const NVM_DATA)) };
+        assert_eq!(list.len(), 1);
+        assert!(list.get_by_event_id(1).is_some());
+    }
+
+    #[test]
     fn fn_remove_out_of_bounds_returns_none() {
-        let mut list = ExtendedRecordList::new();
+        let mut list = ExtendedRecordList::test_new();
 
         let result = list.remove(0);
         assert!(result.is_none());
@@ -340,7 +438,7 @@ mod tests {
 
     #[test]
     fn fn_remove_by_priority() {
-        let mut list = ExtendedRecordList::new();
+        let mut list = ExtendedRecordList::test_new();
 
         for (i, &priority) in [5, 10, 15].iter().enumerate() {
             let ext_rec = ExtendedRecord {
@@ -367,7 +465,7 @@ mod tests {
 
     #[test]
     fn fn_find_lowest_priority() {
-        let mut list = ExtendedRecordList::new();
+        let mut list = ExtendedRecordList::test_new();
 
         for (i, &priority) in [10, 5, 15].iter().enumerate() {
             let ext_rec = ExtendedRecord {
@@ -383,5 +481,29 @@ mod tests {
         assert_eq!(result.priority, 5);
         assert_eq!(result.index, 0);
         assert_eq!(list.iter().nth(result.index).unwrap().event_id, 2);
+    }
+
+    #[test]
+    fn fn_find_lowest_priority_returns_first_when_all_have_same_or_higher_priority() {
+        let mut list = ExtendedRecordList::test_new();
+
+        let ext_rec1 = ExtendedRecord {
+            event_id: 1,
+            priority: 10,
+            date_at_first_save: 0,
+            date_at_last_save: 0,
+        };
+        let ext_rec2 = ExtendedRecord {
+            event_id: 2,
+            priority: 20,
+            date_at_first_save: 0,
+            date_at_last_save: 0,
+        };
+        list.insert(ext_rec1).unwrap();
+        list.insert(ext_rec2).unwrap();
+
+        let result = list.find_lowest_priority();
+        assert_eq!(result.priority, 10);
+        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 1);
     }
 }

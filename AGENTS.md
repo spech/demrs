@@ -2,7 +2,7 @@
 
 ## Embedded Context
 
-This is an embedded automotive project with persistent (non-volatile) data structures:
+This is an embedded automotive project with persistent (non-volatile) data structures stored in **NVM** (non-volatile memory):
 
 - **`NvmConfig`**: Stores event state that persists across power cycles, including:
   - `uds_status`: UDS status byte flags (tf, tftoc, pdtc, cdtc, etc.)
@@ -11,6 +11,8 @@ This is an embedded automotive project with persistent (non-volatile) data struc
   - `occurence_cntr`: Failure occurrence counter
 
 - **`ExtendedRecordList`**: Persistent storage for extended records (24 slots)
+
+Both `NvmConfig` and `ExtendedRecordList` persist across power cycles. They are stored in NVM and are **not cleared** by `reset_event_manager()`. Only the working registers (debounce counter, etc.) are reset.
 
 When writing tests for functions that modify persistent state, be aware that:
 - Tests may need to set up initial `NvmConfig` values before calling `init()`

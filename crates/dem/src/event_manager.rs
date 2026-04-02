@@ -62,11 +62,6 @@ pub struct EventManager {
 }
 
 impl EventManager {
-    /// Clears all extended records by resetting to an empty list.
-    pub fn clear_extended_records(&mut self) {
-        *self.extended_records = ExtendedRecordList::new();
-    }
-
     /// Initializes all managed events at the start of a new operating cycle.
     ///
     /// Calls [`Event::init()`] on each event to reset `tf` and set `tnctoc`.
@@ -188,5 +183,3 @@ impl EventManager {
         }
     }
 }
-
-

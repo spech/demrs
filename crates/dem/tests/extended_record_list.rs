@@ -62,7 +62,12 @@ fn save_trigger_onpdtc_creates_extended_record_on_pdtc_rising() {
     };
 
     let events = Box::leak(Box::new([event]));
-    let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+    static mut EXT_LIST_NVM: [Option<dem::ExtendedRecord>; 24] = [const { None }; 24];
+    let ext_list = unsafe {
+        Box::leak(Box::new(ExtendedRecordList::from_nvm(
+            &*(&raw const EXT_LIST_NVM),
+        )))
+    };
 
     let mut manager = EventManager {
         events,
@@ -113,7 +118,12 @@ fn save_trigger_oncdtc_creates_extended_record_on_cdtc_rising() {
     };
 
     let events = Box::leak(Box::new([event]));
-    let ext_list = Box::leak(Box::new(ExtendedRecordList::new()));
+    static mut EXT_LIST_NVM: [Option<dem::ExtendedRecord>; 24] = [const { None }; 24];
+    let ext_list = unsafe {
+        Box::leak(Box::new(ExtendedRecordList::from_nvm(
+            &*(&raw const EXT_LIST_NVM),
+        )))
+    };
 
     let mut manager = EventManager {
         events,
