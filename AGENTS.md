@@ -1,5 +1,22 @@
 # Agent Guidelines
 
+## Embedded Context
+
+This is an embedded automotive project with persistent (non-volatile) data structures:
+
+- **`NvmConfig`**: Stores event state that persists across power cycles, including:
+  - `uds_status`: UDS status byte flags (tf, tftoc, pdtc, cdtc, etc.)
+  - `confirmation_cycles`: Cycle counter for DTC confirmation
+  - `aging_cycles`: Cycle counter for DTC aging
+  - `occurence_cntr`: Failure occurrence counter
+
+- **`ExtendedRecordList`**: Persistent storage for extended records (24 slots)
+
+When writing tests for functions that modify persistent state, be aware that:
+- Tests may need to set up initial `NvmConfig` values before calling `init()`
+- Some state changes only occur when specific flag combinations are present (e.g., `tftoc`, `tnctoc`, `cdtc`)
+- Functions like `stop()` have different branches based on the combination of these flags
+
 ## Tests
 
 ### Naming Convention (Unit Tests Only)

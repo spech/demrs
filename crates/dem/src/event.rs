@@ -152,6 +152,7 @@ impl Event {
                 if self.nv_config.confirmation_cycles < self.cal_config.confirmation_threshold {
                     self.nv_config.confirmation_cycles =
                         self.nv_config.confirmation_cycles.saturating_add(1u8);
+                    self.nv_config.aging_cycles = 0u8;
                 }
             }
         }
@@ -476,6 +477,99 @@ mod tests {
         assert_eq!(event.nv_config.occurence_cntr, 0);
         assert_eq!(event.nv_config.confirmation_cycles, 0);
         assert_eq!(event.nv_config.aging_cycles, 0);
+    }
+
+    #[test]
+    fn fn_stop_with_pdtc_increment_confirmation_counter() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        event.init();
+        event.step(Status::Failed, true, 0.0).unwrap();
+
+        assert!(event.status().pdtc());
+        assert!(!event.status().cdtc());
+
+        event.stop();
+
+        assert_eq!(event.nv_config.confirmation_cycles, 1);
+    }
+
+    #[test]
+    fn fn_stop_with_cdtc_and_notftoc_increment_aging_cycles() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        event.nv_config.confirmation_cycles = 1;
+        event.nv_config.uds_status.set_cdtc(true);
+        event.init();
+        event.step(Status::Passed, true, 0.0).unwrap();
+        event.uds_status_old = event.nv_config.uds_status;
+
+        assert!(event.status().cdtc());
+        assert!(!event.status().tftoc());
+        assert!(!event.status().tnctoc());
+        assert!(!event.status().pdtc());
+
+        event.stop();
+
+        assert!(!event.status().pdtc());
+        assert_eq!(event.nv_config.aging_cycles, 1);
+    }
+
+    #[test]
+    fn fn_stop_with_cdtc_and_nottftoc_clear_aging_cycle_when_threshold_reached() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        event.nv_config.confirmation_cycles = 1;
+        event.nv_config.aging_cycles = 1;
+        event.nv_config.uds_status.set_cdtc(true);
+        event.init();
+        event.step(Status::Passed, true, 0.0).unwrap();
+
+        assert!(event.status().cdtc());
+        assert!(!event.status().tftoc());
+
+        event.stop();
+
+        assert!(!event.status().cdtc());
+        assert_eq!(event.nv_config.confirmation_cycles, 0);
+    }
+
+    #[test]
+    fn fn_stop_with_cdtc_and_tftoc_do_not_update() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        event.nv_config.aging_cycles = 1;
+        event.nv_config.uds_status.set_cdtc(true);
+        event.init();
+        event.step(Status::Failed, true, 0.0).unwrap();
+
+        assert!(event.status().cdtc());
+        assert!(event.status().tftoc());
+
+        event.stop();
+
+        assert_eq!(event.nv_config.confirmation_cycles, 0);
+        assert_eq!(event.nv_config.aging_cycles, 1);
+    }
+
+    #[test]
+    fn fn_stop_with_nottftoc_and_nottnctoc_do_not_update() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        event.init();
+        event.stop();
+
+        assert!(!event.status().pdtc());
+    }
+
+    #[test]
+    fn fn_stop_with_nottftoc_and_nottnctoc_and_notcdtc_do_not_update() {
+        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        event.nv_config.aging_cycles = 5;
+        event.init();
+        event.step(Status::Passed, true, 0.0).unwrap();
+
+        assert!(!event.status().cdtc());
+        assert!(!event.status().tftoc());
+
+        event.stop();
+
+        assert_eq!(event.nv_config.aging_cycles, 5);
     }
 
     #[test]
