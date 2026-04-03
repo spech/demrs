@@ -244,20 +244,20 @@ impl ExtendedRecordList {
 
     /// Finds the entry with the lowest priority.
     ///
-    /// When multiple entries have the same lowest priority, returns the oldest one
-    /// based on `date_at_last_save`.
+    /// "Lowest priority" means the highest priority value (worst). When multiple entries
+    /// have the same lowest priority, returns the oldest one based on `date_at_last_save`.
     ///
     /// # Returns
     ///
     /// A struct containing the index and priority of the lowest priority entry.
     pub fn find_lowest_priority(&self) -> LowestPriorityResult {
         let mut lowest_idx = 0;
-        let mut lowest_priority = u8::MAX;
+        let mut lowest_priority = u8::MIN;
         let mut oldest_timestamp = u32::MAX;
 
         for i in 0..self.len {
             if let Some(ext_rec) = &self.data[i] {
-                if ext_rec.priority < lowest_priority {
+                if ext_rec.priority > lowest_priority {
                     lowest_priority = ext_rec.priority;
                     lowest_idx = i;
                     oldest_timestamp = ext_rec.date_at_last_save;
@@ -488,9 +488,9 @@ mod tests {
         }
 
         let result = list.find_lowest_priority();
-        assert_eq!(result.priority, 5);
-        assert_eq!(result.index, 0);
-        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 2);
+        assert_eq!(result.priority, 15);
+        assert_eq!(result.index, 2);
+        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 3);
     }
 
     #[test]
@@ -513,8 +513,8 @@ mod tests {
         list.insert(ext_rec2).unwrap();
 
         let result = list.find_lowest_priority();
-        assert_eq!(result.priority, 10);
-        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 1);
+        assert_eq!(result.priority, 20);
+        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 2);
     }
 
     #[test]
@@ -550,5 +550,30 @@ mod tests {
         let result = list.find_lowest_priority();
         assert_eq!(result.priority, 10);
         assert_eq!(list.iter().nth(result.index).unwrap().event_id, 2);
+    }
+
+    #[test]
+    fn fn_find_lowest_priority_do_nothing_branch_when_newer() {
+        let mut list = ExtendedRecordList::test_new();
+
+        let ext_rec1 = ExtendedRecord {
+            event_id: 1,
+            priority: 10,
+            date_at_first_save: 100,
+            date_at_last_save: 100,
+        };
+        let ext_rec2 = ExtendedRecord {
+            event_id: 2,
+            priority: 10,
+            date_at_first_save: 200,
+            date_at_last_save: 200,
+        };
+
+        list.insert(ext_rec1).unwrap();
+        list.insert(ext_rec2).unwrap();
+
+        let result = list.find_lowest_priority();
+        assert_eq!(result.priority, 10);
+        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 1);
     }
 }
