@@ -47,4 +47,27 @@ fn fn_disable_sets_disabled_field() {
 
 **Scope:** This convention applies to **unit tests only**:
 - Unit tests: `#[test]` in source files (`src/*.rs`)
-- Integration tests: `#[test]` in test files (`tests/*.rs`) - excluded
+- Integration tests: `#[test]` in test files (`tests/*.rs`) - use `bdd_` prefix instead
+
+### Naming Convention (Integration Tests)
+
+Integration test names must follow the `bdd_<subject>_<scenario>` pattern:
+
+```rust
+#[test]
+fn bdd_extended_record_list_full_eviction() {
+    // ...
+}
+```
+
+**Rules:**
+- Prefix all test function names with `bdd_`
+- Use `snake_case` for the entire name
+- Include the subject being tested
+- Follow with a descriptive scenario name
+
+**Examples:**
+| Good | Bad |
+|------|-----|
+| `bdd_extended_record_list_full_eviction` | `test_extended_record_list_full` |
+| `bdd_extended_record_list_onpdtc_trigger` | `save_trigger_onpdtc_creates_extended_record_on_pdtc_rising` |
