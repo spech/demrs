@@ -174,7 +174,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 14
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 14
     name: "Event14"
@@ -186,7 +186,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 15
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 15
     name: "Event15"
@@ -198,7 +198,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 16
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 16
     name: "Event16"
@@ -210,7 +210,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 17
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 17
     name: "Event17"
@@ -222,7 +222,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 18
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 18
     name: "Event18"
@@ -234,7 +234,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 19
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 19
     name: "Event19"
@@ -246,7 +246,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 20
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 20
     name: "Event20"
@@ -258,7 +258,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 21
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 21
     name: "Event21"
@@ -270,7 +270,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 22
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 22
     name: "Event22"
@@ -282,7 +282,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 23
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 23
     name: "Event23"
@@ -294,7 +294,7 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 24
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 
   - id: 24
     name: "Event24"
@@ -306,5 +306,5 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 25
-      save_trigger: OnCdtc
+      save_trigger: OnPdtc
 

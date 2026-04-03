@@ -244,18 +244,28 @@ impl ExtendedRecordList {
 
     /// Finds the entry with the lowest priority.
     ///
+    /// When multiple entries have the same lowest priority, returns the oldest one
+    /// based on `date_at_last_save`.
+    ///
     /// # Returns
     ///
     /// A struct containing the index and priority of the lowest priority entry.
     pub fn find_lowest_priority(&self) -> LowestPriorityResult {
         let mut lowest_idx = 0;
         let mut lowest_priority = u8::MAX;
+        let mut oldest_timestamp = u32::MAX;
 
         for i in 0..self.len {
             if let Some(ext_rec) = &self.data[i] {
                 if ext_rec.priority < lowest_priority {
                     lowest_priority = ext_rec.priority;
                     lowest_idx = i;
+                    oldest_timestamp = ext_rec.date_at_last_save;
+                } else if ext_rec.priority == lowest_priority {
+                    if ext_rec.date_at_last_save < oldest_timestamp {
+                        oldest_timestamp = ext_rec.date_at_last_save;
+                        lowest_idx = i;
+                    }
                 }
             }
         }
@@ -505,5 +515,40 @@ mod tests {
         let result = list.find_lowest_priority();
         assert_eq!(result.priority, 10);
         assert_eq!(list.iter().nth(result.index).unwrap().event_id, 1);
+    }
+
+    #[test]
+    fn fn_find_lowest_priority_returns_oldest_when_priorities_equal() {
+        let mut list = ExtendedRecordList::test_new();
+
+        // With equal priorities, find the oldest based on date_at_last_save
+        // date_at_last_save: 300, 100, 200
+        // Expected: event_id 2 (oldest, date_at_last_save = 100)
+        let ext_rec_newest = ExtendedRecord {
+            event_id: 1,
+            priority: 10,
+            date_at_first_save: 300,
+            date_at_last_save: 300,
+        };
+        let ext_rec_oldest = ExtendedRecord {
+            event_id: 2,
+            priority: 10,
+            date_at_first_save: 100,
+            date_at_last_save: 100,
+        };
+        let ext_rec_middle = ExtendedRecord {
+            event_id: 3,
+            priority: 10,
+            date_at_first_save: 200,
+            date_at_last_save: 200,
+        };
+
+        list.insert(ext_rec_newest).unwrap(); // index 0
+        list.insert(ext_rec_oldest).unwrap(); // index 1
+        list.insert(ext_rec_middle).unwrap(); // index 2
+
+        let result = list.find_lowest_priority();
+        assert_eq!(result.priority, 10);
+        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 2);
     }
 }

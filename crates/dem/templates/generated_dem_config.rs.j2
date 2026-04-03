@@ -54,16 +54,5 @@ pub mod {{ fixture.module_name }} {
     };
 
     pub const EVENT_COUNT: usize = {{ fixture.events|length }};
-
-    pub fn reset_event_manager() {
-        let _em = unsafe { (&raw mut EVENT_MANAGER as *mut EventManager).as_mut().unwrap() };
-{% for event in fixture.events %}
-        let cfg = unsafe { &mut *core::ptr::addr_of_mut!(NVM_CONFIG_{{ loop.index0 }}) };
-        cfg.uds_status = UdsStatusByte::from_raw(0);
-        cfg.occurence_cntr = 0;
-        cfg.aging_cycles = 0;
-        cfg.confirmation_cycles = {{ event.calib.confirmation_threshold }};
-{% endfor %}
-    }
 }
 {% endfor %}

@@ -99,6 +99,18 @@ impl EventManager {
         }
     }
 
+    /// Clears fault memory by calling `clear()` on all events and removing all extended records.
+    ///
+    /// This is typically called in response to a "Clear DTC" request (e.g., OBD service $04).
+    pub fn clear(&mut self) {
+        for event in self.events.iter_mut() {
+            event.clear();
+        }
+        while !self.extended_records.is_empty() {
+            self.extended_records.remove(0);
+        }
+    }
+
     /// Advances the specified event by one step.
     ///
     /// Returns [`EventManagerError::NotInitializedError`] if the state is [`EventManagerState::Off`].
