@@ -1,0 +1,58 @@
+// Auto-generated from fixtures - DO NOT EDIT MANUALLY
+
+{% for fixture in fixtures %}
+// From: {{ fixture.source_file }}
+#[allow(dead_code)]
+pub mod {{ fixture.module_name }} {
+    use crate::CalibConfig;
+    use crate::event::{Event, NvmConfig};
+    use crate::event_config::{DebounceBehavior, DebounceType, SaveTrigger};
+    use crate::event_manager::{EventManager, EventManagerState};
+    use crate::ExtendedRecordList;
+    use crate::UdsStatusByte;
+
+{% for event in fixture.events %}
+    pub static mut NVM_CONFIG_{{ loop.index0 }}: NvmConfig = NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    };
+
+    pub static CALIB_CONFIG_{{ loop.index0 }}: CalibConfig = CalibConfig {
+        step_up: {{ event.calib.step_up }},
+        step_down: {{ event.calib.step_down }},
+        debounce_behavior: DebounceBehavior::{{ event.calib.debounce_behavior }},
+        debounce_type: DebounceType::{{ event.calib.debounce_type }},
+        confirmation_threshold: {{ event.calib.confirmation_threshold }},
+        aging_threshold: {{ event.calib.aging_threshold }},
+        priority: {{ event.calib.priority }},
+        save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnCdtc' }},
+    };
+{% endfor %}
+
+    const EXTENDED_RECORDS_NVM: [Option<crate::ExtendedRecord>; 24] = [const { None }; 24];
+
+    static mut EXTENDED_RECORDS: ExtendedRecordList = ExtendedRecordList::from_nvm(&EXTENDED_RECORDS_NVM);
+
+    static mut ALL_EVENTS: [Event; {{ fixture.events|length }}] = [
+{% for event in fixture.events %}
+        Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::from_raw(0),
+            disabled: false,
+            nv_config: unsafe { &mut *core::ptr::addr_of_mut!(NVM_CONFIG_{{ loop.index0 }}) },
+            cal_config: CALIB_CONFIG_{{ loop.index0 }},
+        },
+{% endfor %}
+    ];
+
+    pub static mut EVENT_MANAGER: EventManager = EventManager {
+        events: unsafe { core::slice::from_raw_parts_mut(&raw mut ALL_EVENTS as *mut Event, {{ fixture.events|length }}) },
+        extended_records: unsafe { &mut *(&raw mut EXTENDED_RECORDS) },
+        state: EventManagerState::Off,
+    };
+
+    pub const EVENT_COUNT: usize = {{ fixture.events|length }};
+}
+{% endfor %}

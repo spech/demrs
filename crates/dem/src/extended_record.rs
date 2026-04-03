@@ -10,18 +10,14 @@
 pub type EventId = u16;
 
 // ─────────────────────────────────────────────
-// EventManagerError
+// ExtendedRecordListError
 // ─────────────────────────────────────────────
 
-/// Error type for [`EventManager`] operations.
+/// Error type for [`ExtendedRecordList`] operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EventManagerError {
+pub enum ExtendedRecordListError {
     /// The extended records list has reached its maximum capacity.
     ListFullError,
-    /// The provided event ID is out of bounds.
-    InvalidEventIdError,
-    /// The event step operation failed.
-    EventStepError,
 }
 
 // ─────────────────────────────────────────────
@@ -43,12 +39,12 @@ pub enum EventManagerError {
 pub struct ExtendedRecord {
     /// Unique identifier for this event.
     pub event_id: EventId,
-    /// Priority value used for ordering in [`ExtendedRecordList`].
+    /// Priority value for ordering in [`ExtendedRecordList`].
     pub priority: u8,
-    /// Timestamp of the first save operation.
-    pub date_at_first_save: Option<chrono::DateTime<chrono::Utc>>,
-    /// Timestamp of the last save operation.
-    pub date_at_last_save: Option<chrono::DateTime<chrono::Utc>>,
+    /// Timestamp of the first save operation (0 = not set).
+    pub date_at_first_save: u32,
+    /// Timestamp of the last save operation (0 = not set).
+    pub date_at_last_save: u32,
 }
 
 // ─────────────────────────────────────────────
@@ -57,9 +53,7 @@ pub struct ExtendedRecord {
 
 /// Result of finding the lowest priority entry in an [`ExtendedRecordList`].
 pub struct LowestPriorityResult {
-    /// Index of the lowest priority entry.
     pub index: usize,
-    /// The lowest priority value.
     pub priority: u8,
 }
 
@@ -71,13 +65,16 @@ pub struct LowestPriorityResult {
 /// ## Capacity
 ///
 /// The list has a fixed capacity of 24 entries. Attempting to insert
-/// when full returns [`EventManagerError::ListFullError`].
+/// when full returns [`ExtendedRecordListError::ListFullError`].
 ///
 /// ## Usage
 ///
-/// Create an instance with [`ExtendedRecordList::new()`], insert records
+/// Create an instance with [`ExtendedRecordList::from_nvm()`], insert records
 /// with [`ExtendedRecordList::insert()`], and access them via
 /// [`ExtendedRecordList::get_by_event_id()`] or iterators.
+///
+/// For embedded systems with NVM, the `ExtendedRecordList` should be stored
+/// in NVM to persist across power cycles.
 pub struct ExtendedRecordList {
     data: [Option<ExtendedRecord>; 24],
     len: usize,
@@ -86,19 +83,54 @@ pub struct ExtendedRecordList {
 impl ExtendedRecordList {
     const CAPACITY: usize = 24;
 
-    /// Creates a new, empty `ExtendedRecordList`.
+    /// Returns a mutable reference to the list.
     ///
     /// # Returns
     ///
-    /// A new empty list with capacity for 24 entries.
-    pub const fn new() -> Self {
-        Self {
-            data: [const { None }; 24],
-            len: 0,
+    /// A mutable reference to this `ExtendedRecordList`.
+    pub fn as_mut(&mut self) -> &mut ExtendedRecordList {
+        self
+    }
+
+    /// Creates an `ExtendedRecordList` from NVM storage.
+    ///
+    /// # Arguments
+    ///
+    /// * `nvm_data` - Reference to NVM storage array
+    ///
+    /// # Returns
+    ///
+    /// A new list initialized from NVM data.
+    pub const fn from_nvm(nvm_data: &'static [Option<ExtendedRecord>; 24]) -> Self {
+        let mut len = 0;
+        let mut i = 0;
+        while i < 24 {
+            if nvm_data[i].is_some() {
+                len += 1;
+            }
+            i += 1;
         }
+        let mut data = [const { None }; 24];
+        i = 0;
+        while i < 24 {
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    nvm_data.as_ptr().add(i),
+                    (&mut data as *mut [Option<ExtendedRecord>; 24] as *mut Option<ExtendedRecord>)
+                        .add(i),
+                    1,
+                );
+            }
+            i += 1;
+        }
+        Self { data, len }
     }
 
     /// Returns the number of entries in the list.
+    ///
+    /// # Returns
+    ///
+    /// The number of entries currently stored in the list.
     pub fn len(&self) -> usize {
         self.len
     }
@@ -182,15 +214,15 @@ impl ExtendedRecordList {
     /// # Returns
     ///
     /// `Ok(())` if insertion succeeded.
-    /// `Err(EventManagerError::ListFullError)` if the list is full and no entry has lower priority.
-    pub fn insert(&mut self, ext_rec: ExtendedRecord) -> Result<(), EventManagerError> {
+    /// `Err(ExtendedRecordListError::ListFullError)` if the list is full and no entry has lower priority.
+    pub fn insert(&mut self, ext_rec: ExtendedRecord) -> Result<(), ExtendedRecordListError> {
         if self.is_full() {
             let new_priority = ext_rec.priority;
             let lowest = self.find_lowest_priority();
             if new_priority < lowest.priority {
                 self.remove(lowest.index);
             } else {
-                return Err(EventManagerError::ListFullError);
+                return Err(ExtendedRecordListError::ListFullError);
             }
         }
 
@@ -212,18 +244,28 @@ impl ExtendedRecordList {
 
     /// Finds the entry with the lowest priority.
     ///
+    /// "Lowest priority" means the highest priority value (worst). When multiple entries
+    /// have the same lowest priority, returns the oldest one based on `date_at_last_save`.
+    ///
     /// # Returns
     ///
     /// A struct containing the index and priority of the lowest priority entry.
     pub fn find_lowest_priority(&self) -> LowestPriorityResult {
         let mut lowest_idx = 0;
-        let mut lowest_priority = u8::MAX;
+        let mut lowest_priority = u8::MIN;
+        let mut oldest_timestamp = u32::MAX;
 
         for i in 0..self.len {
             if let Some(ext_rec) = &self.data[i] {
-                if ext_rec.priority < lowest_priority {
+                if ext_rec.priority > lowest_priority {
                     lowest_priority = ext_rec.priority;
                     lowest_idx = i;
+                    oldest_timestamp = ext_rec.date_at_last_save;
+                } else if ext_rec.priority == lowest_priority {
+                    if ext_rec.date_at_last_save < oldest_timestamp {
+                        oldest_timestamp = ext_rec.date_at_last_save;
+                        lowest_idx = i;
+                    }
                 }
             }
         }
@@ -286,16 +328,23 @@ impl ExtendedRecordList {
 mod tests {
     use super::*;
 
+    impl ExtendedRecordList {
+        fn test_new() -> Self {
+            static mut NVM: [Option<ExtendedRecord>; 24] = [const { None }; 24];
+            unsafe { ExtendedRecordList::from_nvm(&*(&raw const NVM)) }
+        }
+    }
+
     #[test]
-    fn extended_record_list_insert_full_returns_error() {
-        let mut list = ExtendedRecordList::new();
+    fn fn_insert_full_returns_error() {
+        let mut list = ExtendedRecordList::test_new();
 
         for i in 0..24 {
             let ext_rec = ExtendedRecord {
                 event_id: i,
                 priority: 10 + i as u8,
-                date_at_first_save: None,
-                date_at_last_save: None,
+                date_at_first_save: 0,
+                date_at_last_save: 0,
             };
             list.insert(ext_rec).unwrap();
         }
@@ -306,11 +355,11 @@ mod tests {
         let ext_rec = ExtendedRecord {
             event_id: 99,
             priority: 100,
-            date_at_first_save: None,
-            date_at_last_save: None,
+            date_at_first_save: 0,
+            date_at_last_save: 0,
         };
         let result = list.insert(ext_rec);
-        assert_eq!(result.unwrap_err(), EventManagerError::ListFullError);
+        assert_eq!(result.unwrap_err(), ExtendedRecordListError::ListFullError);
 
         assert_eq!(list.len(), 24);
         assert!(list.get_by_event_id(0).is_some());
@@ -319,8 +368,65 @@ mod tests {
     }
 
     #[test]
-    fn extended_record_list_remove_out_of_bounds_returns_none() {
-        let mut list = ExtendedRecordList::new();
+    fn fn_insert_full_evicts_lowest_when_new_has_higher_priority() {
+        let mut list = ExtendedRecordList::test_new();
+
+        for i in 0..24 {
+            let ext_rec = ExtendedRecord {
+                event_id: i,
+                priority: 10 + i as u8,
+                date_at_first_save: 0,
+                date_at_last_save: 0,
+            };
+            list.insert(ext_rec).unwrap();
+        }
+
+        let new_rec = ExtendedRecord {
+            event_id: 99,
+            priority: 5,
+            date_at_first_save: 100,
+            date_at_last_save: 200,
+        };
+        let result = list.insert(new_rec);
+        assert!(result.is_ok());
+        assert_eq!(list.len(), 24);
+        assert!(list.is_full());
+        assert!(list.get_by_event_id(99).is_some());
+    }
+
+    #[test]
+    fn fn_is_empty_return_true_when_list_is_empty() {
+        let list = ExtendedRecordList::test_new();
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn fn_as_mut_returns_mutable_reference() {
+        let mut list = ExtendedRecordList::test_new();
+        let _ = list.as_mut();
+        assert!(list.is_empty());
+    }
+
+    #[test]
+    fn fn_from_nvm_initializes_from_nvm_data() {
+        static mut NVM_DATA: [Option<ExtendedRecord>; 24] = [const { None }; 24];
+        unsafe {
+            NVM_DATA[0] = Some(ExtendedRecord {
+                event_id: 1,
+                priority: 10,
+                date_at_first_save: 100,
+                date_at_last_save: 200,
+            });
+        }
+
+        let list = unsafe { ExtendedRecordList::from_nvm(&*(&raw const NVM_DATA)) };
+        assert_eq!(list.len(), 1);
+        assert!(list.get_by_event_id(1).is_some());
+    }
+
+    #[test]
+    fn fn_remove_out_of_bounds_returns_none() {
+        let mut list = ExtendedRecordList::test_new();
 
         let result = list.remove(0);
         assert!(result.is_none());
@@ -328,8 +434,8 @@ mod tests {
         let ext_rec = ExtendedRecord {
             event_id: 1,
             priority: 5,
-            date_at_first_save: None,
-            date_at_last_save: None,
+            date_at_first_save: 0,
+            date_at_last_save: 0,
         };
         list.insert(ext_rec).unwrap();
 
@@ -341,15 +447,15 @@ mod tests {
     }
 
     #[test]
-    fn extended_record_list_remove_by_priority() {
-        let mut list = ExtendedRecordList::new();
+    fn fn_remove_by_priority() {
+        let mut list = ExtendedRecordList::test_new();
 
         for (i, &priority) in [5, 10, 15].iter().enumerate() {
             let ext_rec = ExtendedRecord {
                 event_id: (i + 1) as EventId,
                 priority,
-                date_at_first_save: None,
-                date_at_last_save: None,
+                date_at_first_save: 0,
+                date_at_last_save: 0,
             };
             list.insert(ext_rec).unwrap();
         }
@@ -368,22 +474,106 @@ mod tests {
     }
 
     #[test]
-    fn extended_record_list_find_lowest_priority() {
-        let mut list = ExtendedRecordList::new();
+    fn fn_find_lowest_priority() {
+        let mut list = ExtendedRecordList::test_new();
 
         for (i, &priority) in [10, 5, 15].iter().enumerate() {
             let ext_rec = ExtendedRecord {
                 event_id: (i + 1) as EventId,
                 priority,
-                date_at_first_save: None,
-                date_at_last_save: None,
+                date_at_first_save: 0,
+                date_at_last_save: 0,
             };
             list.insert(ext_rec).unwrap();
         }
 
         let result = list.find_lowest_priority();
-        assert_eq!(result.priority, 5);
-        assert_eq!(result.index, 0);
+        assert_eq!(result.priority, 15);
+        assert_eq!(result.index, 2);
+        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 3);
+    }
+
+    #[test]
+    fn fn_find_lowest_priority_returns_first_when_all_have_same_or_higher_priority() {
+        let mut list = ExtendedRecordList::test_new();
+
+        let ext_rec1 = ExtendedRecord {
+            event_id: 1,
+            priority: 10,
+            date_at_first_save: 0,
+            date_at_last_save: 0,
+        };
+        let ext_rec2 = ExtendedRecord {
+            event_id: 2,
+            priority: 20,
+            date_at_first_save: 0,
+            date_at_last_save: 0,
+        };
+        list.insert(ext_rec1).unwrap();
+        list.insert(ext_rec2).unwrap();
+
+        let result = list.find_lowest_priority();
+        assert_eq!(result.priority, 20);
         assert_eq!(list.iter().nth(result.index).unwrap().event_id, 2);
+    }
+
+    #[test]
+    fn fn_find_lowest_priority_returns_oldest_when_priorities_equal() {
+        let mut list = ExtendedRecordList::test_new();
+
+        // With equal priorities, find the oldest based on date_at_last_save
+        // date_at_last_save: 300, 100, 200
+        // Expected: event_id 2 (oldest, date_at_last_save = 100)
+        let ext_rec_newest = ExtendedRecord {
+            event_id: 1,
+            priority: 10,
+            date_at_first_save: 300,
+            date_at_last_save: 300,
+        };
+        let ext_rec_oldest = ExtendedRecord {
+            event_id: 2,
+            priority: 10,
+            date_at_first_save: 100,
+            date_at_last_save: 100,
+        };
+        let ext_rec_middle = ExtendedRecord {
+            event_id: 3,
+            priority: 10,
+            date_at_first_save: 200,
+            date_at_last_save: 200,
+        };
+
+        list.insert(ext_rec_newest).unwrap(); // index 0
+        list.insert(ext_rec_oldest).unwrap(); // index 1
+        list.insert(ext_rec_middle).unwrap(); // index 2
+
+        let result = list.find_lowest_priority();
+        assert_eq!(result.priority, 10);
+        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 2);
+    }
+
+    #[test]
+    fn fn_find_lowest_priority_do_nothing_branch_when_newer() {
+        let mut list = ExtendedRecordList::test_new();
+
+        let ext_rec1 = ExtendedRecord {
+            event_id: 1,
+            priority: 10,
+            date_at_first_save: 100,
+            date_at_last_save: 100,
+        };
+        let ext_rec2 = ExtendedRecord {
+            event_id: 2,
+            priority: 10,
+            date_at_first_save: 200,
+            date_at_last_save: 200,
+        };
+
+        list.insert(ext_rec1).unwrap();
+        list.insert(ext_rec2).unwrap();
+
+        let result = list.find_lowest_priority();
+        assert_eq!(result.priority, 10);
+        assert_eq!(list.iter().nth(result.index).unwrap().event_id, 1);
     }
 }
