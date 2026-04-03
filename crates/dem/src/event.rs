@@ -321,6 +321,7 @@ impl Event {
         self.debounce_counter = i16::MIN;
         self.nv_config.uds_status.set_tf(false);
         self.nv_config.uds_status.set_tnctoc(false);
+        self.nv_config.uds_status.set_tncslc(false);
     }
 }
 
