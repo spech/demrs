@@ -159,6 +159,12 @@ impl FreezeFrameList {
         self.len == Self::CAPACITY
     }
 
+    /// Clears all entries from the list.
+    pub fn clear(&mut self) {
+        self.data = [const { None }; 24];
+        self.len = 0;
+    }
+
     /// Returns a reference to the entry with the given event ID.
     ///
     /// # Arguments

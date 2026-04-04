@@ -175,6 +175,7 @@ events:
       aging_threshold: 10
       priority: 14
       save_trigger: OnPdtc
+      record_update: false
 
   - id: 14
     name: "Event14"
@@ -294,7 +295,8 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 24
-      save_trigger: OnPdtc
+      save_trigger: OnTf
+      record_update: true
 
   - id: 24
     name: "Event24"
@@ -306,30 +308,5 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 25
-      save_trigger: OnPdtc
-
-  - id: 25
-    name: "Event25"
-    calib:
-      step_up: 1
-      step_down: 1
-      debounce_type: CounterBased
-      debounce_behavior: Freeze
-      confirmation_threshold: 1
-      aging_threshold: 10
-      priority: 26
-      save_trigger: OnTf
-      record_update: false
-
-  - id: 26
-    name: "Event26"
-    calib:
-      step_up: 1
-      step_down: 1
-      debounce_type: CounterBased
-      debounce_behavior: Freeze
-      confirmation_threshold: 1
-      aging_threshold: 10
-      priority: 27
       save_trigger: OnTftoc
 

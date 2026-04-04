@@ -105,10 +105,10 @@ impl EventManager {
     pub fn clear(&mut self) {
         for event in self.events.iter_mut() {
             event.clear();
+            event.nv_config.uds_status = UdsStatusByte::from_raw(0);
+            event.uds_status_old = UdsStatusByte::from_raw(0);
         }
-        while !self.freeze_frames.is_empty() {
-            self.freeze_frames.remove(0);
-        }
+        self.freeze_frames.clear();
     }
 
     /// Advances the specified event by one step.

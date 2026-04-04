@@ -2,6 +2,7 @@ use dem::{
     f_25_events::EVENT_MANAGER, EventManager, EventManagerState, FreezeFrameList, SnapshotConfig,
     SnapshotSource, Status,
 };
+use serial_test::serial;
 
 fn create_empty_snapshot_config() -> &'static SnapshotConfig {
     const EMPTY_CONFIG: SnapshotConfig = SnapshotConfig {
@@ -30,6 +31,7 @@ fn create_empty_snapshot_config() -> &'static SnapshotConfig {
 /// **Expected**: After filling 24 slots, event 25 cannot evict any existing entry
 /// because all have lower priority values (better priority).
 #[test]
+#[serial]
 fn bdd_freeze_frame_list_full_eviction() {
     let cal_config_template = dem::CalibConfig {
         step_up: 1,
@@ -116,6 +118,7 @@ fn bdd_freeze_frame_list_full_eviction() {
 /// **Expected**: Error because no existing entry has worse priority (>= 24) to evict.
 /// Only entries with priority greater than new_priority can be evicted.
 #[test]
+#[serial]
 fn bdd_freeze_frame_list_full_reject_lower_priority() {
     let cal_config_template = dem::CalibConfig {
         step_up: 1,
@@ -200,6 +203,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
 /// **Expected**: After one step with Status::Failed, pdtc rises and a freeze
 /// frame is created with event_id=13, priority=14, and timestamps set to 100.
 #[test]
+#[serial]
 fn bdd_freeze_frame_list_onpdtc_trigger() {
     let manager = unsafe {
         (&raw mut EVENT_MANAGER as *mut EventManager)
@@ -236,6 +240,7 @@ fn bdd_freeze_frame_list_onpdtc_trigger() {
 ///
 /// **Expected**: Freeze frame created only after cdtc is confirmed.
 #[test]
+#[serial]
 fn bdd_freeze_frame_list_oncdtc_trigger() {
     let manager = unsafe {
         (&raw mut EVENT_MANAGER as *mut EventManager)
@@ -277,6 +282,7 @@ fn bdd_freeze_frame_list_oncdtc_trigger() {
 /// - cdtc must be true (still confirmed)
 /// - aging_cycles must reach aging_threshold
 #[test]
+#[serial]
 fn bdd_freeze_frame_list_remove_aged_event() {
     let manager = unsafe {
         (&raw mut EVENT_MANAGER as *mut EventManager)
@@ -325,15 +331,17 @@ fn bdd_freeze_frame_list_remove_aged_event() {
 /// should track both when the fault was first recorded and when it was most recently
 /// active. This helps diagnose intermittent issues by showing fault history.
 ///
-/// **Setup**: Uses fixture event 13 which has save_trigger = OnPdtc
+/// **Setup**: Uses fixture event 23 which has save_trigger = OnTf, record_update = true
 ///
 /// **Flow**:
-/// 1. First failure at timestamp 100: record created with timestamps = 100
-/// 2. Reset pdtc to false to allow rising edge detection
-/// 3. Second failure at timestamp 200: last_occurrence_time updated to 200
+/// 1. clear() + init()
+/// 2. First failure at timestamp 100: record created, occurrence_counter = 1
+/// 3. Passed to reset tf
+/// 4. Second failure at timestamp 200: last_occurrence_time updated to 200
 ///
 /// **Expected**: first_occurrence_time remains 100 (unchanged), last_occurrence_time becomes 200.
 #[test]
+#[serial]
 fn bdd_freeze_frame_list_new_occurence_update_last_occurrence_time() {
     let manager = unsafe {
         (&raw mut EVENT_MANAGER as *mut EventManager)
@@ -344,36 +352,19 @@ fn bdd_freeze_frame_list_new_occurence_update_last_occurrence_time() {
     manager.clear();
     manager.init();
 
-    manager.step(13, Status::Failed, true, 0.0, 100).unwrap();
+    manager.step(23, Status::Failed, true, 0.0, 100).unwrap();
 
+    assert_eq!(manager.events[23].nv_config.occurence_cntr, 1);
     assert_eq!(manager.freeze_frames.len(), 1);
-    let record = manager.freeze_frames.get_by_event_id(13).unwrap();
+    let record = manager.freeze_frames.get_by_event_id(23).unwrap();
     assert_eq!(record.first_occurrence_time, 100);
     assert_eq!(record.last_occurrence_time, 100);
 
-    manager.events[13].nv_config.uds_status.set_pdtc(false);
+    manager.step(23, Status::Passed, true, 0.0, 150).unwrap();
 
-    // Debug: check status before step
-    let ev = &manager.events[13];
-    eprintln!(
-        "DEBUG before step2: tf={}, pdtc={}, uds_status_old={:?}",
-        ev.nv_config.uds_status.tf(),
-        ev.nv_config.uds_status.pdtc(),
-        ev.uds_status_old
-    );
+    manager.step(23, Status::Failed, true, 0.0, 200).unwrap();
 
-    manager.step(13, Status::Failed, true, 0.0, 200).unwrap();
-
-    // Debug: check status after step
-    let ev = &manager.events[13];
-    eprintln!(
-        "DEBUG after step2: tf={}, pdtc={}, uds_status_old={:?}",
-        ev.nv_config.uds_status.tf(),
-        ev.nv_config.uds_status.pdtc(),
-        ev.uds_status_old
-    );
-
-    let record = manager.freeze_frames.get_by_event_id(13).unwrap();
+    let record = manager.freeze_frames.get_by_event_id(23).unwrap();
     assert_eq!(record.first_occurrence_time, 100);
     assert_eq!(record.last_occurrence_time, 200);
 }
@@ -383,7 +374,7 @@ fn bdd_freeze_frame_list_new_occurence_update_last_occurrence_time() {
 /// **Use Case**: When an event is configured with save_trigger = OnTf, the DEM
 /// should create a freeze frame when the test failed flag (tf) rises.
 ///
-/// **Setup**: Uses fixture event 25 which has save_trigger = OnTf
+/// **Setup**: Uses fixture event 23 which has save_trigger = OnTf
 ///
 /// **Flow**:
 /// 1. clear() + init()
@@ -392,6 +383,7 @@ fn bdd_freeze_frame_list_new_occurence_update_last_occurrence_time() {
 ///
 /// **Expected**: Freeze frame created after tf rises.
 #[test]
+#[serial]
 fn bdd_freeze_frame_list_ontf_trigger() {
     let manager = unsafe {
         (&raw mut EVENT_MANAGER as *mut EventManager)
@@ -402,14 +394,14 @@ fn bdd_freeze_frame_list_ontf_trigger() {
     manager.clear();
     manager.init();
 
-    // Event 25 has save_trigger: OnTf
+    // Event 23 has save_trigger: OnTf
     // After one Failed step, tf rises and cdtc is set (confirmation_threshold=1)
-    manager.step(25, Status::Failed, true, 0.0, 100).unwrap();
+    manager.step(23, Status::Failed, true, 0.0, 100).unwrap();
 
     assert_eq!(manager.freeze_frames.len(), 1);
-    let record = manager.freeze_frames.get_by_event_id(25).unwrap();
-    assert_eq!(record.event_id, 25);
-    assert_eq!(record.priority, 26);
+    let record = manager.freeze_frames.get_by_event_id(23).unwrap();
+    assert_eq!(record.event_id, 23);
+    assert_eq!(record.priority, 24);
     assert_eq!(record.first_occurrence_time, 100);
     assert_eq!(record.last_occurrence_time, 100);
 }
@@ -419,7 +411,7 @@ fn bdd_freeze_frame_list_ontf_trigger() {
 /// **Use Case**: When an event is configured with save_trigger = OnTftoc, the DEM
 /// should create a freeze frame when the test failed this operation cycle flag (tftoc) rises.
 ///
-/// **Setup**: Uses fixture event 26 which has save_trigger = OnTftoc
+/// **Setup**: Uses fixture event 24 which has save_trigger = OnTftoc
 ///
 /// **Flow**:
 /// 1. clear() + init()
@@ -428,6 +420,7 @@ fn bdd_freeze_frame_list_ontf_trigger() {
 ///
 /// **Expected**: Freeze frame created after tftoc rises.
 #[test]
+#[serial]
 fn bdd_freeze_frame_list_ontftoc_trigger() {
     let manager = unsafe {
         (&raw mut EVENT_MANAGER as *mut EventManager)
@@ -438,14 +431,14 @@ fn bdd_freeze_frame_list_ontftoc_trigger() {
     manager.clear();
     manager.init();
 
-    // Event 26 has save_trigger: OnTftoc
+    // Event 24 has save_trigger: OnTftoc
     // After one Failed step, tf and tftoc rise
-    manager.step(26, Status::Failed, true, 0.0, 100).unwrap();
+    manager.step(24, Status::Failed, true, 0.0, 100).unwrap();
 
     assert_eq!(manager.freeze_frames.len(), 1);
-    let record = manager.freeze_frames.get_by_event_id(26).unwrap();
-    assert_eq!(record.event_id, 26);
-    assert_eq!(record.priority, 27);
+    let record = manager.freeze_frames.get_by_event_id(24).unwrap();
+    assert_eq!(record.event_id, 24);
+    assert_eq!(record.priority, 25);
     assert_eq!(record.first_occurrence_time, 100);
     assert_eq!(record.last_occurrence_time, 100);
 }
@@ -455,17 +448,18 @@ fn bdd_freeze_frame_list_ontftoc_trigger() {
 /// **Use Case**: When an event has record_update = false, repeated trigger events
 /// should not update the last_occurrence_time of an existing freeze frame.
 ///
-/// **Setup**: Uses fixture event 25 which has save_trigger = OnTf, record_update = false
+/// **Setup**: Uses fixture event 13 which has save_trigger = OnPdtc, record_update = false
 ///
 /// **Flow**:
 /// 1. clear() + init()
 /// 2. step(Failed) - freeze frame created at t=100
 /// 3. stop() + init()
-/// 4. step(Failed) - tf rises again, freeze frame exists but shouldn't update
+/// 4. step(Failed) - pdtc rises again, freeze frame exists but shouldn't update
 /// 5. Verify last_occurrence_time remains 100
 ///
 /// **Expected**: last_occurrence_time stays at 100 despite second trigger.
 #[test]
+#[serial]
 fn bdd_freeze_frame_list_record_update_disabled() {
     let manager = unsafe {
         (&raw mut EVENT_MANAGER as *mut EventManager)
@@ -476,23 +470,23 @@ fn bdd_freeze_frame_list_record_update_disabled() {
     manager.clear();
     manager.init();
 
-    // Event 25 has save_trigger: OnTf, record_update: false
+    // Event 13 has save_trigger: OnPdtc, record_update: false
     // First occurrence at t=100
-    manager.step(25, Status::Failed, true, 0.0, 100).unwrap();
+    manager.step(13, Status::Failed, true, 0.0, 100).unwrap();
 
     assert_eq!(manager.freeze_frames.len(), 1);
-    let record = manager.freeze_frames.get_by_event_id(25).unwrap();
+    let record = manager.freeze_frames.get_by_event_id(13).unwrap();
     assert_eq!(record.first_occurrence_time, 100);
     assert_eq!(record.last_occurrence_time, 100);
 
     manager.stop();
     manager.init();
 
-    // Second occurrence at t=200 - tf rises again
-    manager.step(25, Status::Failed, true, 0.0, 200).unwrap();
+    // Second occurrence at t=200 - pdtc rises again
+    manager.step(13, Status::Failed, true, 0.0, 200).unwrap();
 
     // record_update is false, so last_occurrence_time should NOT be updated
-    let record = manager.freeze_frames.get_by_event_id(25).unwrap();
+    let record = manager.freeze_frames.get_by_event_id(13).unwrap();
     assert_eq!(record.first_occurrence_time, 100);
     assert_eq!(record.last_occurrence_time, 100);
 }
