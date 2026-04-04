@@ -1,4 +1,20 @@
-use dem::{f_25_events::EVENT_MANAGER, EventManager, EventManagerState, FreezeFrameList, Status};
+use dem::{
+    f_25_events::EVENT_MANAGER, EventManager, EventManagerState, FreezeFrameList, SnapshotConfig,
+    SnapshotSource, Status,
+};
+
+fn create_empty_snapshot_config() -> &'static SnapshotConfig {
+    const EMPTY_CONFIG: SnapshotConfig = SnapshotConfig {
+        sources: [const {
+            SnapshotSource {
+                address: core::ptr::null(),
+                size: 0,
+            }
+        }; 255],
+        count: 0,
+    };
+    &EMPTY_CONFIG
+}
 
 /// Tests that the FreezeFrameList evicts the lowest priority entry when full.
 ///
@@ -65,6 +81,7 @@ fn bdd_freeze_frame_list_full_eviction() {
     let mut manager = EventManager {
         events,
         freeze_frames: ff_list,
+        snapshot_config: create_empty_snapshot_config(),
         state: EventManagerState::Off,
     };
 
@@ -150,6 +167,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
     let mut manager = EventManager {
         events,
         freeze_frames: ff_list,
+        snapshot_config: create_empty_snapshot_config(),
         state: EventManagerState::Off,
     };
 
@@ -335,7 +353,25 @@ fn bdd_freeze_frame_list_new_occurence_update_last_occurrence_time() {
 
     manager.events[13].nv_config.uds_status.set_pdtc(false);
 
+    // Debug: check status before step
+    let ev = &manager.events[13];
+    eprintln!(
+        "DEBUG before step2: tf={}, pdtc={}, uds_status_old={:?}",
+        ev.nv_config.uds_status.tf(),
+        ev.nv_config.uds_status.pdtc(),
+        ev.uds_status_old
+    );
+
     manager.step(13, Status::Failed, true, 0.0, 200).unwrap();
+
+    // Debug: check status after step
+    let ev = &manager.events[13];
+    eprintln!(
+        "DEBUG after step2: tf={}, pdtc={}, uds_status_old={:?}",
+        ev.nv_config.uds_status.tf(),
+        ev.nv_config.uds_status.pdtc(),
+        ev.uds_status_old
+    );
 
     let record = manager.freeze_frames.get_by_event_id(13).unwrap();
     assert_eq!(record.first_occurrence_time, 100);

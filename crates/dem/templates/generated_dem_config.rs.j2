@@ -6,10 +6,34 @@
 pub mod {{ fixture.module_name }} {
     use crate::CalibConfig;
     use crate::event::{Event, NvmConfig};
-    use crate::event_config::{DebounceBehavior, DebounceType, SaveTrigger};
+    use crate::event_config::{DebounceBehavior, DebounceType, SaveTrigger, SnapshotConfig, SnapshotSource};
     use crate::event_manager::{EventManager, EventManagerState};
     use crate::FreezeFrameList;
     use crate::UdsStatusByte;
+
+{% if fixture.snapshot_sources %}
+// Snapshot source static variables
+{% for source in fixture.snapshot_sources %}
+    static {{ source.name }}: u{{ source.size * 8 }} = 0;
+{% endfor %}
+
+    const SNAPSHOT_CONFIG: SnapshotConfig = SnapshotConfig {
+        sources: [
+{% for source in fixture.snapshot_sources %}
+            SnapshotSource { address: &{{ source.name }} as *const _ as *const u8, size: {{ source.size }} },
+{% endfor %}
+{% for _ in range(fixture.snapshot_sources|length, 255) %}
+            SnapshotSource { address: core::ptr::null(), size: 0 },
+{% endfor %}
+        ],
+        count: {{ fixture.snapshot_sources|length }},
+    };
+{% else %}
+    const SNAPSHOT_CONFIG: SnapshotConfig = SnapshotConfig {
+        sources: [const { SnapshotSource { address: core::ptr::null(), size: 0 } }; 255],
+        count: 0,
+    };
+{% endif %}
 
 {% for event in fixture.events %}
     pub static mut NVM_CONFIG_{{ loop.index0 }}: NvmConfig = NvmConfig {
@@ -28,7 +52,7 @@ pub mod {{ fixture.module_name }} {
         aging_threshold: {{ event.calib.aging_threshold }},
         priority: {{ event.calib.priority }},
         save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnTftoc' }},
-        record_update: {{ 'true' if event.calib.record_update is not defined or event.calib.record_update else 'false' }},
+        record_update: {{ 'true' if event.calib.record_update == true else 'false' }},
     };
 {% endfor %}
 
@@ -51,6 +75,7 @@ pub mod {{ fixture.module_name }} {
     pub static mut EVENT_MANAGER: EventManager = EventManager {
         events: unsafe { core::slice::from_raw_parts_mut(&raw mut ALL_EVENTS as *mut Event, {{ fixture.events|length }}) },
         freeze_frames: unsafe { &mut *(&raw mut FREEZE_FRAMES) },
+        snapshot_config: &SNAPSHOT_CONFIG,
         state: EventManagerState::Off,
     };
 

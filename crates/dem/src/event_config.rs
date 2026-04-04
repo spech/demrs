@@ -66,3 +66,29 @@ pub struct CalibConfig {
     /// allowance to update an existing freeze frame.
     pub record_update: bool,
 }
+
+// ─────────────────────────────────────────────
+// Snapshot Configuration
+// ─────────────────────────────────────────────
+
+/// Size of the snapshot data buffer in bytes.
+pub const SNAPSHOT_DATA_SIZE: usize = 255;
+
+/// A source of snapshot data (address + size in bytes).
+#[derive(Clone, Copy, Debug)]
+pub struct SnapshotSource {
+    /// Pointer to the memory location to capture.
+    pub address: *const u8,
+    /// Number of bytes to copy from the address.
+    pub size: u8,
+}
+
+/// Global snapshot configuration for all events.
+/// Contains the list of memory sources to capture when creating/updating freeze frames.
+#[derive(Clone, Copy)]
+pub struct SnapshotConfig {
+    /// Array of snapshot sources (up to 255).
+    pub sources: [SnapshotSource; 255],
+    /// Number of active sources (sources before this count are valid).
+    pub count: u8,
+}

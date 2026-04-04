@@ -34,6 +34,17 @@ struct CalibFixture {
 #[derive(Debug, Deserialize, Serialize)]
 struct EventManagerFixture {}
 
+#[derive(Debug, Deserialize, Serialize)]
+struct SnapshotSourceFixture {
+    name: String,
+    size: u8,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SnapshotConfigFixture {
+    sources: Vec<SnapshotSourceFixture>,
+}
+
 fn sanitize_module_name(name: &str) -> String {
     let mut result = String::new();
     for (i, c) in name.chars().enumerate() {
@@ -62,6 +73,22 @@ fn main() {
     let fixtures_dir = Path::new("tests/fixtures");
     let templates_dir = Path::new("templates");
 
+    // Load snapshot config from separate YAML file
+    let snapshot_config_path = fixtures_dir.join("snapshot_config.yaml");
+    let snapshot_sources: Vec<SnapshotSourceFixture> = if snapshot_config_path.exists() {
+        if let Ok(content) = fs::read_to_string(&snapshot_config_path) {
+            if let Ok(config) = serde_yaml::from_str::<SnapshotConfigFixture>(&content) {
+                config.sources
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
     let mut fixtures_data = Vec::new();
 
     if fixtures_dir.exists() {
@@ -69,6 +96,9 @@ fn main() {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
+                    if path.file_name().and_then(|s| s.to_str()) == Some("snapshot_config.yaml") {
+                        continue;
+                    }
                     if let Ok(content) = fs::read_to_string(&path) {
                         if let Ok(fixture) = serde_yaml::from_str::<Fixture>(&content) {
                             let stem = path
@@ -82,7 +112,12 @@ fn main() {
                                 "module_name": module_name,
                                 "events": fixture.events,
                                 "event_manager": fixture.event_manager,
+                                "snapshot_sources": snapshot_sources,
                             }));
+                            eprintln!(
+                                "DEBUG events[0].calib.record_update = {:?}",
+                                fixture.events[0].calib.record_update
+                            );
                         }
                     }
                 }

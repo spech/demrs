@@ -2,6 +2,8 @@
 // Freeze Frame Module
 // ─────────────────────────────────────────────
 
+use crate::event_config::SNAPSHOT_DATA_SIZE;
+
 // ─────────────────────────────────────────────
 // EventId
 // ─────────────────────────────────────────────
@@ -35,8 +37,8 @@ pub enum FreezeFrameListError {
 /// ## Usage
 ///
 /// [`FreezeFrame`] instances are stored in [`FreezeFrameList`]
-/// and managed by [`EventManager`]. Use [`FreezeFrame::capture_snapshot()`]
-/// to populate the data field after creation.
+/// and managed by [`EventManager`]. Snapshot data is automatically
+/// captured by [`EventManager::auto_capture_snapshot()`].
 #[derive(Clone)]
 pub struct FreezeFrame {
     /// Unique identifier for this event.
@@ -48,31 +50,7 @@ pub struct FreezeFrame {
     /// Timestamp of the last occurrence (0 = not set).
     pub last_occurrence_time: u32,
     /// Snapshot data captured at the time of the event.
-    pub snapshot_data: [u8; 255],
-}
-
-impl FreezeFrame {
-    /// Captures snapshot data into the freeze frame.
-    ///
-    /// # Arguments
-    ///
-    /// * `f` - A closure that receives a mutable reference to the data array
-    ///         and populates it with snapshot values.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// freeze_frame.capture_snapshot(|data| {
-    ///     data[0] = sensor_value;
-    ///     data[1] = temperature;
-    /// });
-    /// ```
-    pub fn capture_snapshot<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut [u8]),
-    {
-        f(&mut self.snapshot_data);
-    }
+    pub snapshot_data: [u8; SNAPSHOT_DATA_SIZE],
 }
 
 // ─────────────────────────────────────────────
@@ -262,7 +240,7 @@ impl FreezeFrameList {
     /// `Ok(index)` - The index where the entry was inserted.
     /// `Err(FreezeFrameListError::ListFullError)` if the list is full and no entry has lower priority.
     pub fn insert(&mut self, mut freeze_frame: FreezeFrame) -> Result<usize, FreezeFrameListError> {
-        freeze_frame.snapshot_data = [0u8; 255];
+        freeze_frame.snapshot_data = [0u8; SNAPSHOT_DATA_SIZE];
 
         if self.is_full() {
             let new_priority = freeze_frame.priority;
@@ -397,7 +375,7 @@ mod tests {
             priority,
             first_occurrence_time: first,
             last_occurrence_time: last,
-            snapshot_data: [0u8; 255],
+            snapshot_data: [0u8; SNAPSHOT_DATA_SIZE],
         }
     }
 
@@ -460,7 +438,7 @@ mod tests {
         let idx = list.insert(create_freeze_frame(1, 10, 100, 200)).unwrap();
         let ff = list.get_mut(idx).unwrap();
 
-        assert_eq!(ff.snapshot_data, [0u8; 255]);
+        assert_eq!(ff.snapshot_data, [0u8; SNAPSHOT_DATA_SIZE]);
     }
 
     #[test]
@@ -485,7 +463,7 @@ mod tests {
                 priority: 10,
                 first_occurrence_time: 100,
                 last_occurrence_time: 200,
-                snapshot_data: [0u8; 255],
+                snapshot_data: [0u8; SNAPSHOT_DATA_SIZE],
             });
         }
 
@@ -583,37 +561,6 @@ mod tests {
     }
 
     #[test]
-    fn fn_capture_snapshot_writes_data() {
-        let mut ff = create_freeze_frame(1, 10, 0, 0);
-
-        ff.capture_snapshot(|data| {
-            data[0] = 42;
-            data[1] = 0xAB;
-            data[254] = 255;
-        });
-
-        assert_eq!(ff.snapshot_data[0], 42);
-        assert_eq!(ff.snapshot_data[1], 0xAB);
-        assert_eq!(ff.snapshot_data[2], 0);
-        assert_eq!(ff.snapshot_data[254], 255);
-    }
-
-    #[test]
-    fn fn_capture_snapshot_overwrites_existing_data() {
-        let mut ff = create_freeze_frame(1, 10, 0, 0);
-        ff.snapshot_data = [0xFFu8; 255];
-
-        ff.capture_snapshot(|data| {
-            data[0] = 0;
-            data[1] = 0;
-        });
-
-        assert_eq!(ff.snapshot_data[0], 0);
-        assert_eq!(ff.snapshot_data[1], 0);
-        assert_eq!(ff.snapshot_data[2], 0xFF);
-    }
-
-    #[test]
     fn fn_get_mut_returns_mutable_reference() {
         let mut list = FreezeFrameList::test_new();
         list.insert(create_freeze_frame(1, 10, 100, 200)).unwrap();
@@ -623,7 +570,7 @@ mod tests {
         assert_eq!(ff.first_occurrence_time, 100);
 
         ff.last_occurrence_time = 300;
-        drop(ff);
+        let _ = ff;
 
         let ff = list.get_mut(0).unwrap();
         assert_eq!(ff.last_occurrence_time, 300);
