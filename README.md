@@ -98,7 +98,49 @@ confirmator = "0.1"
 
 ## Usage Examples
 
-<!-- TODO: Add usage examples for each crate -->
+### DEM TUI
+
+An interactive terminal UI for observing and interacting with the DEM library, featuring a Tokyo Night color theme.
+
+**Run the TUI:**
+
+```bash
+cargo run --example dem_tui -p dem
+```
+
+**Features:**
+- View all events with real-time UDS status flags (TF, TFTOC, PDTC, CDTC)
+- See debounce counter values and NVM statistics (occurrence, aging, confirmation cycles)
+- Edit CalibConfig parameters at runtime (step_up/down, debounce type/behavior, thresholds, etc.)
+- View stored freeze frames with hex dump of snapshot data
+- Manual operating cycle simulation (stop/init cycles)
+- Trigger events via keyboard shortcuts
+- Press `?` to show the keyboard shortcuts legend
+
+**Keyboard Controls:**
+
+| Key | Action |
+|-----|--------|
+| `1-9` | Trigger PreFailed on Event 0-8 |
+| `Shift+1-9` | Trigger PrePassed on Event 0-8 |
+| `Ctrl+1-9` | Trigger immediate Failed on Event 0-8 |
+| `↑/↓` | Navigate between events or freeze frames |
+| `PgUp/PgDn` | Scroll the details panel |
+| `I` | Initialize operating cycle |
+| `S` | Stop operating cycle |
+| `N` | Advance to next cycle (stop + init) |
+| `C` | Clear all events and freeze frames |
+| `F` | Toggle freeze frames panel |
+| `E` | Edit CalibConfig for selected event |
+| `D` | Delete selected freeze frame |
+| `?` / `H` | Show/hide help overlay |
+| `Q` | Quit |
+
+**Editing CalibConfig:**
+1. Press `E` to enter edit mode
+2. Use `Tab` to cycle through fields (step_up, step_down, debounce_type, debounce_behavior, confirmation_threshold, aging_threshold, priority, save_trigger, record_update)
+3. Type the new value
+4. Press `Enter` to apply, `Esc` to cancel
 
 ## Development
 

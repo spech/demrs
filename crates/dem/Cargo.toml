@@ -19,4 +19,10 @@ minijinja = { version = "2", features = ["loader"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 serial_test = "3"
+ratatui = { version = "0.28", features = ["serde"] }
+crossterm = "0.28"
+
+[[example]]
+name = "dem_tui"
+path = "examples/dem_tui.rs"
 
