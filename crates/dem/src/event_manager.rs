@@ -86,8 +86,10 @@ impl EventManager {
             let new_status = self.events[index].stop();
 
             let falling_edge = match save_trigger {
-                SaveTrigger::OnCdtc => !new_status.cdtc() && old_status.cdtc(),
                 SaveTrigger::OnPdtc => !new_status.pdtc() && old_status.pdtc(),
+                SaveTrigger::OnCdtc => !new_status.cdtc() && old_status.cdtc(),
+                SaveTrigger::OnTf => !new_status.tf() && old_status.tf(),
+                SaveTrigger::OnTftoc => !new_status.tftoc() && old_status.tftoc(),
             };
 
             if falling_edge {
@@ -153,8 +155,10 @@ impl EventManager {
         let new_status = event.nv_config.uds_status;
 
         let rising_edge = match save_trigger {
-            SaveTrigger::OnCdtc => new_status.cdtc() && !old_status.cdtc(),
             SaveTrigger::OnPdtc => new_status.pdtc() && !old_status.pdtc(),
+            SaveTrigger::OnCdtc => new_status.cdtc() && !old_status.cdtc(),
+            SaveTrigger::OnTf => new_status.tf() && !old_status.tf(),
+            SaveTrigger::OnTftoc => new_status.tftoc() && !old_status.tftoc(),
         };
 
         if rising_edge {

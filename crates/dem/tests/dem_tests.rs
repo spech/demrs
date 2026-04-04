@@ -339,3 +339,75 @@ fn bdd_freeze_frame_list_new_occurence_update_last_occurrence_time() {
     assert_eq!(record.first_occurrence_time, 100);
     assert_eq!(record.last_occurrence_time, 200);
 }
+
+/// Tests that OnTf trigger creates a freeze frame on tf rising edge.
+///
+/// **Use Case**: When an event is configured with save_trigger = OnTf, the DEM
+/// should create a freeze frame when the test failed flag (tf) rises.
+///
+/// **Setup**: Uses fixture event 25 which has save_trigger = OnTf
+///
+/// **Flow**:
+/// 1. clear() + init()
+/// 2. step(Failed) - tf rises, cdtc set (confirmation reached)
+/// 3. Freeze frame created on tf rising edge
+///
+/// **Expected**: Freeze frame created after tf rises.
+#[test]
+fn bdd_freeze_frame_list_ontf_trigger() {
+    let manager = unsafe {
+        (&raw mut EVENT_MANAGER as *mut EventManager)
+            .as_mut()
+            .unwrap()
+    };
+
+    manager.clear();
+    manager.init();
+
+    // Event 25 has save_trigger: OnTf
+    // After one Failed step, tf rises and cdtc is set (confirmation_threshold=1)
+    manager.step(25, Status::Failed, true, 0.0, 100).unwrap();
+
+    assert_eq!(manager.freeze_frames.len(), 1);
+    let record = manager.freeze_frames.get_by_event_id(25).unwrap();
+    assert_eq!(record.event_id, 25);
+    assert_eq!(record.priority, 26);
+    assert_eq!(record.first_occurrence_time, 100);
+    assert_eq!(record.last_occurrence_time, 100);
+}
+
+/// Tests that OnTftoc trigger creates a freeze frame on tftoc rising edge.
+///
+/// **Use Case**: When an event is configured with save_trigger = OnTftoc, the DEM
+/// should create a freeze frame when the test failed this operation cycle flag (tftoc) rises.
+///
+/// **Setup**: Uses fixture event 26 which has save_trigger = OnTftoc
+///
+/// **Flow**:
+/// 1. clear() + init()
+/// 2. step(Failed) - tf rises, tftoc set
+/// 3. Freeze frame created on tftoc rising edge
+///
+/// **Expected**: Freeze frame created after tftoc rises.
+#[test]
+fn bdd_freeze_frame_list_ontftoc_trigger() {
+    let manager = unsafe {
+        (&raw mut EVENT_MANAGER as *mut EventManager)
+            .as_mut()
+            .unwrap()
+    };
+
+    manager.clear();
+    manager.init();
+
+    // Event 26 has save_trigger: OnTftoc
+    // After one Failed step, tf and tftoc rise
+    manager.step(26, Status::Failed, true, 0.0, 100).unwrap();
+
+    assert_eq!(manager.freeze_frames.len(), 1);
+    let record = manager.freeze_frames.get_by_event_id(26).unwrap();
+    assert_eq!(record.event_id, 26);
+    assert_eq!(record.priority, 27);
+    assert_eq!(record.first_occurrence_time, 100);
+    assert_eq!(record.last_occurrence_time, 100);
+}

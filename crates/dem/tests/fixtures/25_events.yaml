@@ -308,3 +308,27 @@ events:
       priority: 25
       save_trigger: OnPdtc
 
+  - id: 25
+    name: "Event25"
+    calib:
+      step_up: 1
+      step_down: 1
+      debounce_type: CounterBased
+      debounce_behavior: Freeze
+      confirmation_threshold: 1
+      aging_threshold: 10
+      priority: 26
+      save_trigger: OnTf
+
+  - id: 26
+    name: "Event26"
+    calib:
+      step_up: 1
+      step_down: 1
+      debounce_type: CounterBased
+      debounce_behavior: Freeze
+      confirmation_threshold: 1
+      aging_threshold: 10
+      priority: 27
+      save_trigger: OnTftoc
+

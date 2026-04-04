@@ -20,15 +20,19 @@ pub enum DebounceType {
     TimeBased,
 }
 
-/// Trigger condition for saving extended records.
+/// Trigger condition for saving freeze frames.
 ///
-/// Determines when an event's extended record should be created or updated.
+/// Determines when an event's freeze frame should be created or updated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SaveTrigger {
-    /// Save extended record when `cdtc` (confirmed DTC) is set.
-    OnCdtc,
-    /// Save extended record when `pdtc` (pending DTC) is set.
+    /// Save freeze frame when `pdtc` (pending DTC) rises.
     OnPdtc,
+    /// Save freeze frame when `cdtc` (confirmed DTC) rises.
+    OnCdtc,
+    /// Save freeze frame when `tf` (test failed) rises.
+    OnTf,
+    /// Save freeze frame when `tftoc` (test failed this operation cycle) rises.
+    OnTftoc,
 }
 
 /// Calibration configuration for [`Event`](crate::event::Event).

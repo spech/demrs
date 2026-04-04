@@ -27,7 +27,7 @@ pub mod {{ fixture.module_name }} {
         confirmation_threshold: {{ event.calib.confirmation_threshold }},
         aging_threshold: {{ event.calib.aging_threshold }},
         priority: {{ event.calib.priority }},
-        save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnCdtc' }},
+        save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnTftoc' }},
     };
 {% endfor %}
 
