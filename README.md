@@ -72,9 +72,9 @@ Key components:
 - [`EventError`] - Error types for invalid operations
 - [`CalibConfig`] - Calibration parameters (lifetime-bound references)
 - [`NvmConfig`] - Non-volatile configuration storage
-- [`ExtendedRecord`] - Persistent data associated with an Event (survives power cycles)
-- [`ExtendedRecordList`] - Fixed-capacity (24) list of ExtendedRecord entries, priority-ordered
-- [`EventManager`] - Manages a collection of Events and their ExtendedRecord data
+- [`FreezeFrame`] - Persistent data associated with an Event (survives power cycles)
+- [`FreezeFrameList`] - Fixed-capacity (24) list of FreezeFrame entries, priority-ordered
+- [`EventManager`] - Manages a collection of Events and their FreezeFrame data
 - [`EventManagerError`] - Error types for EventManager operations
 
 ### confirmator

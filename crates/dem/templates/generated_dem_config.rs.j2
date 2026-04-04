@@ -8,7 +8,7 @@ pub mod {{ fixture.module_name }} {
     use crate::event::{Event, NvmConfig};
     use crate::event_config::{DebounceBehavior, DebounceType, SaveTrigger};
     use crate::event_manager::{EventManager, EventManagerState};
-    use crate::ExtendedRecordList;
+    use crate::FreezeFrameList;
     use crate::UdsStatusByte;
 
 {% for event in fixture.events %}
@@ -31,9 +31,9 @@ pub mod {{ fixture.module_name }} {
     };
 {% endfor %}
 
-    const EXTENDED_RECORDS_NVM: [Option<crate::ExtendedRecord>; 24] = [const { None }; 24];
+    const FREEZE_FRAMES_NVM: [Option<crate::FreezeFrame>; 24] = [const { None }; 24];
 
-    static mut EXTENDED_RECORDS: ExtendedRecordList = ExtendedRecordList::from_nvm(&EXTENDED_RECORDS_NVM);
+    static mut FREEZE_FRAMES: FreezeFrameList = FreezeFrameList::from_nvm(&FREEZE_FRAMES_NVM);
 
     static mut ALL_EVENTS: [Event; {{ fixture.events|length }}] = [
 {% for event in fixture.events %}
@@ -49,7 +49,7 @@ pub mod {{ fixture.module_name }} {
 
     pub static mut EVENT_MANAGER: EventManager = EventManager {
         events: unsafe { core::slice::from_raw_parts_mut(&raw mut ALL_EVENTS as *mut Event, {{ fixture.events|length }}) },
-        extended_records: unsafe { &mut *(&raw mut EXTENDED_RECORDS) },
+        freeze_frames: unsafe { &mut *(&raw mut FREEZE_FRAMES) },
         state: EventManagerState::Off,
     };
 

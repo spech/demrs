@@ -1,4 +1,4 @@
-# 25-event fixture for testing ExtendedRecordList (capacity: 24)
+# 25-event fixture for testing FreezeFrameList (capacity: 24)
 # All events have uniform configuration for predictable testing:
 # - debounce_type: CounterBased
 # - debounce_behavior: Freeze
