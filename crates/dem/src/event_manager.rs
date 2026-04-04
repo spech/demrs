@@ -75,24 +75,16 @@ impl EventManager {
     ///
     /// Sets the state to [`EventManagerState::Off`].
     /// Calls [`Event::stop()`] on each event to update cycle counters and disable them.
-    /// If a falling edge is detected on the save_trigger status bit, the corresponding
-    /// freeze frame is freed.
+    /// If aging threshold is reached, the corresponding freeze frame is freed.
     pub fn stop(&mut self) {
         self.state = EventManagerState::Off;
         let len = self.events.len();
         for index in 0..len {
-            let save_trigger = self.events[index].cal_config.save_trigger;
-            let old_status = self.events[index].uds_status_old;
-            let new_status = self.events[index].stop();
+            self.events[index].stop();
 
-            let falling_edge = match save_trigger {
-                SaveTrigger::OnPdtc => !new_status.pdtc() && old_status.pdtc(),
-                SaveTrigger::OnCdtc => !new_status.cdtc() && old_status.cdtc(),
-                SaveTrigger::OnTf => !new_status.tf() && old_status.tf(),
-                SaveTrigger::OnTftoc => !new_status.tftoc() && old_status.tftoc(),
-            };
-
-            if falling_edge {
+            if self.events[index].nv_config.aging_cycles
+                    >= self.events[index].cal_config.aging_threshold
+            {
                 let event_id = index as EventId;
                 self.free_from_freeze_frames(event_id);
             }
