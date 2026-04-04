@@ -363,6 +363,7 @@ mod tests {
             aging_threshold: 1,
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
+            record_update: true,
         }
     }
 
@@ -419,6 +420,7 @@ mod tests {
             aging_threshold: 1,
             priority: 5,
             save_trigger: SaveTrigger::OnCdtc,
+            record_update: true,
         };
         let event = Event {
             debounce_counter: 0,
@@ -442,6 +444,7 @@ mod tests {
             aging_threshold: 1,
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
+            record_update: true,
         };
         let mut event = Event {
             debounce_counter: 0,

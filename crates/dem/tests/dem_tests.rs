@@ -24,6 +24,7 @@ fn bdd_freeze_frame_list_full_eviction() {
         aging_threshold: 1,
         priority: 10,
         save_trigger: dem::SaveTrigger::OnPdtc,
+        record_update: true,
     };
 
     let mut events = Vec::new();
@@ -108,6 +109,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         aging_threshold: 1,
         priority: 24,
         save_trigger: dem::SaveTrigger::OnPdtc,
+        record_update: true,
     };
 
     let mut events = Vec::new();
@@ -408,6 +410,53 @@ fn bdd_freeze_frame_list_ontftoc_trigger() {
     let record = manager.freeze_frames.get_by_event_id(26).unwrap();
     assert_eq!(record.event_id, 26);
     assert_eq!(record.priority, 27);
+    assert_eq!(record.first_occurrence_time, 100);
+    assert_eq!(record.last_occurrence_time, 100);
+}
+
+/// Tests that record_update: false prevents last_occurrence_time from being updated.
+///
+/// **Use Case**: When an event has record_update = false, repeated trigger events
+/// should not update the last_occurrence_time of an existing freeze frame.
+///
+/// **Setup**: Uses fixture event 25 which has save_trigger = OnTf, record_update = false
+///
+/// **Flow**:
+/// 1. clear() + init()
+/// 2. step(Failed) - freeze frame created at t=100
+/// 3. stop() + init()
+/// 4. step(Failed) - tf rises again, freeze frame exists but shouldn't update
+/// 5. Verify last_occurrence_time remains 100
+///
+/// **Expected**: last_occurrence_time stays at 100 despite second trigger.
+#[test]
+fn bdd_freeze_frame_list_record_update_disabled() {
+    let manager = unsafe {
+        (&raw mut EVENT_MANAGER as *mut EventManager)
+            .as_mut()
+            .unwrap()
+    };
+
+    manager.clear();
+    manager.init();
+
+    // Event 25 has save_trigger: OnTf, record_update: false
+    // First occurrence at t=100
+    manager.step(25, Status::Failed, true, 0.0, 100).unwrap();
+
+    assert_eq!(manager.freeze_frames.len(), 1);
+    let record = manager.freeze_frames.get_by_event_id(25).unwrap();
+    assert_eq!(record.first_occurrence_time, 100);
+    assert_eq!(record.last_occurrence_time, 100);
+
+    manager.stop();
+    manager.init();
+
+    // Second occurrence at t=200 - tf rises again
+    manager.step(25, Status::Failed, true, 0.0, 200).unwrap();
+
+    // record_update is false, so last_occurrence_time should NOT be updated
+    let record = manager.freeze_frames.get_by_event_id(25).unwrap();
     assert_eq!(record.first_occurrence_time, 100);
     assert_eq!(record.last_occurrence_time, 100);
 }

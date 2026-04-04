@@ -319,6 +319,7 @@ events:
       aging_threshold: 10
       priority: 26
       save_trigger: OnTf
+      record_update: false
 
   - id: 26
     name: "Event26"

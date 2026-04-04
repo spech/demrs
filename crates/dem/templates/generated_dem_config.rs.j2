@@ -28,6 +28,7 @@ pub mod {{ fixture.module_name }} {
         aging_threshold: {{ event.calib.aging_threshold }},
         priority: {{ event.calib.priority }},
         save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnTftoc' }},
+        record_update: {{ 'true' if event.calib.record_update is not defined or event.calib.record_update else 'false' }},
     };
 {% endfor %}
 

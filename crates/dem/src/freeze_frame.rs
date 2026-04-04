@@ -30,11 +30,13 @@ pub enum FreezeFrameListError {
 /// - Event identifier
 /// - Priority for ordering in [`FreezeFrameList`]
 /// - Timestamps for first and last occurrence
+/// - Snapshot data captured at the time of the event
 ///
 /// ## Usage
 ///
 /// [`FreezeFrame`] instances are stored in [`FreezeFrameList`]
-/// and managed by [`EventManager`].
+/// and managed by [`EventManager`]. Use [`FreezeFrame::capture_snapshot()`]
+/// to populate the data field after creation.
 #[derive(Clone)]
 pub struct FreezeFrame {
     /// Unique identifier for this event.
@@ -45,6 +47,32 @@ pub struct FreezeFrame {
     pub first_occurrence_time: u32,
     /// Timestamp of the last occurrence (0 = not set).
     pub last_occurrence_time: u32,
+    /// Snapshot data captured at the time of the event.
+    pub snapshot_data: [u8; 255],
+}
+
+impl FreezeFrame {
+    /// Captures snapshot data into the freeze frame.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - A closure that receives a mutable reference to the data array
+    ///         and populates it with snapshot values.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// freeze_frame.capture_snapshot(|data| {
+    ///     data[0] = sensor_value;
+    ///     data[1] = temperature;
+    /// });
+    /// ```
+    pub fn capture_snapshot<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut [u8]),
+    {
+        f(&mut self.snapshot_data);
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -179,6 +207,23 @@ impl FreezeFrameList {
         self.iter_mut().find(|ff| ff.event_id == event_id)
     }
 
+    /// Returns a mutable reference to the entry at the given index.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The index of the entry to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// `Some(&mut FreezeFrame)` if the index is valid, `None` otherwise.
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut FreezeFrame> {
+        if index < self.len {
+            self.data[index].as_mut()
+        } else {
+            None
+        }
+    }
+
     /// Returns an iterator over all entries in insertion order.
     ///
     /// # Returns
@@ -206,6 +251,7 @@ impl FreezeFrameList {
     /// Inserts a new entry into the list, maintaining priority order.
     ///
     /// If the list is full, replaces the lowest priority entry if the new entry has higher priority.
+    /// The `data` field is zero-initialized.
     ///
     /// # Arguments
     ///
@@ -213,9 +259,11 @@ impl FreezeFrameList {
     ///
     /// # Returns
     ///
-    /// `Ok(())` if insertion succeeded.
+    /// `Ok(index)` - The index where the entry was inserted.
     /// `Err(FreezeFrameListError::ListFullError)` if the list is full and no entry has lower priority.
-    pub fn insert(&mut self, freeze_frame: FreezeFrame) -> Result<(), FreezeFrameListError> {
+    pub fn insert(&mut self, mut freeze_frame: FreezeFrame) -> Result<usize, FreezeFrameListError> {
+        freeze_frame.snapshot_data = [0u8; 255];
+
         if self.is_full() {
             let new_priority = freeze_frame.priority;
             let lowest = self.find_lowest_priority();
@@ -239,7 +287,7 @@ impl FreezeFrameList {
 
         self.data[pos] = Some(freeze_frame);
         self.len += 1;
-        Ok(())
+        Ok(pos)
     }
 
     /// Finds the entry with the lowest priority.
@@ -250,7 +298,15 @@ impl FreezeFrameList {
     /// # Returns
     ///
     /// A struct containing the index and priority of the lowest priority entry.
+    /// Returns index=0, priority=0 if the list is empty.
     pub fn find_lowest_priority(&self) -> LowestPriorityResult {
+        if self.len == 0 {
+            return LowestPriorityResult {
+                index: 0,
+                priority: u8::MIN,
+            };
+        }
+
         let mut lowest_idx = 0;
         let mut lowest_priority = u8::MIN;
         let mut oldest_timestamp = u32::MAX;
@@ -335,29 +391,29 @@ mod tests {
         }
     }
 
+    fn create_freeze_frame(event_id: u16, priority: u8, first: u32, last: u32) -> FreezeFrame {
+        FreezeFrame {
+            event_id,
+            priority,
+            first_occurrence_time: first,
+            last_occurrence_time: last,
+            snapshot_data: [0u8; 255],
+        }
+    }
+
     #[test]
     fn fn_insert_full_returns_error() {
         let mut list = FreezeFrameList::test_new();
 
         for i in 0..24 {
-            let freeze_frame = FreezeFrame {
-                event_id: i,
-                priority: 10 + i as u8,
-                first_occurrence_time: 0,
-                last_occurrence_time: 0,
-            };
+            let freeze_frame = create_freeze_frame(i, 10 + i as u8, 0, 0);
             list.insert(freeze_frame).unwrap();
         }
 
         assert!(list.is_full());
         assert_eq!(list.len(), 24);
 
-        let freeze_frame = FreezeFrame {
-            event_id: 99,
-            priority: 100,
-            first_occurrence_time: 0,
-            last_occurrence_time: 0,
-        };
+        let freeze_frame = create_freeze_frame(99, 100, 0, 0);
         let result = list.insert(freeze_frame);
         assert_eq!(result.unwrap_err(), FreezeFrameListError::ListFullError);
 
@@ -372,26 +428,39 @@ mod tests {
         let mut list = FreezeFrameList::test_new();
 
         for i in 0..24 {
-            let freeze_frame = FreezeFrame {
-                event_id: i,
-                priority: 10 + i as u8,
-                first_occurrence_time: 0,
-                last_occurrence_time: 0,
-            };
+            let freeze_frame = create_freeze_frame(i, 10 + i as u8, 0, 0);
             list.insert(freeze_frame).unwrap();
         }
 
-        let new_rec = FreezeFrame {
-            event_id: 99,
-            priority: 5,
-            first_occurrence_time: 100,
-            last_occurrence_time: 200,
-        };
+        let new_rec = create_freeze_frame(99, 5, 100, 200);
         let result = list.insert(new_rec);
         assert!(result.is_ok());
         assert_eq!(list.len(), 24);
         assert!(list.is_full());
         assert!(list.get_by_event_id(99).is_some());
+    }
+
+    #[test]
+    fn fn_insert_returns_index() {
+        let mut list = FreezeFrameList::test_new();
+
+        let result = list.insert(create_freeze_frame(1, 10, 0, 0));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+
+        let result = list.insert(create_freeze_frame(2, 5, 0, 0));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
+    fn fn_insert_zero_initializes_data() {
+        let mut list = FreezeFrameList::test_new();
+
+        let idx = list.insert(create_freeze_frame(1, 10, 100, 200)).unwrap();
+        let ff = list.get_mut(idx).unwrap();
+
+        assert_eq!(ff.snapshot_data, [0u8; 255]);
     }
 
     #[test]
@@ -416,6 +485,7 @@ mod tests {
                 priority: 10,
                 first_occurrence_time: 100,
                 last_occurrence_time: 200,
+                snapshot_data: [0u8; 255],
             });
         }
 
@@ -431,13 +501,7 @@ mod tests {
         let result = list.remove(0);
         assert!(result.is_none());
 
-        let freeze_frame = FreezeFrame {
-            event_id: 1,
-            priority: 5,
-            first_occurrence_time: 0,
-            last_occurrence_time: 0,
-        };
-        list.insert(freeze_frame).unwrap();
+        list.insert(create_freeze_frame(1, 5, 0, 0)).unwrap();
 
         let result = list.remove(5);
         assert!(result.is_none());
@@ -450,15 +514,9 @@ mod tests {
     fn fn_remove_by_priority() {
         let mut list = FreezeFrameList::test_new();
 
-        for (i, &priority) in [5, 10, 15].iter().enumerate() {
-            let freeze_frame = FreezeFrame {
-                event_id: (i + 1) as EventId,
-                priority,
-                first_occurrence_time: 0,
-                last_occurrence_time: 0,
-            };
-            list.insert(freeze_frame).unwrap();
-        }
+        list.insert(create_freeze_frame(1, 5, 0, 0)).unwrap();
+        list.insert(create_freeze_frame(2, 10, 0, 0)).unwrap();
+        list.insert(create_freeze_frame(3, 15, 0, 0)).unwrap();
 
         assert_eq!(list.len(), 3);
 
@@ -477,15 +535,9 @@ mod tests {
     fn fn_find_lowest_priority() {
         let mut list = FreezeFrameList::test_new();
 
-        for (i, &priority) in [10, 5, 15].iter().enumerate() {
-            let freeze_frame = FreezeFrame {
-                event_id: (i + 1) as EventId,
-                priority,
-                first_occurrence_time: 0,
-                last_occurrence_time: 0,
-            };
-            list.insert(freeze_frame).unwrap();
-        }
+        list.insert(create_freeze_frame(1, 10, 0, 0)).unwrap();
+        list.insert(create_freeze_frame(2, 5, 0, 0)).unwrap();
+        list.insert(create_freeze_frame(3, 15, 0, 0)).unwrap();
 
         let result = list.find_lowest_priority();
         assert_eq!(result.priority, 15);
@@ -497,20 +549,8 @@ mod tests {
     fn fn_find_lowest_priority_returns_first_when_all_have_same_or_higher_priority() {
         let mut list = FreezeFrameList::test_new();
 
-        let freeze_frame1 = FreezeFrame {
-            event_id: 1,
-            priority: 10,
-            first_occurrence_time: 0,
-            last_occurrence_time: 0,
-        };
-        let freeze_frame2 = FreezeFrame {
-            event_id: 2,
-            priority: 20,
-            first_occurrence_time: 0,
-            last_occurrence_time: 0,
-        };
-        list.insert(freeze_frame1).unwrap();
-        list.insert(freeze_frame2).unwrap();
+        list.insert(create_freeze_frame(1, 10, 0, 0)).unwrap();
+        list.insert(create_freeze_frame(2, 20, 0, 0)).unwrap();
 
         let result = list.find_lowest_priority();
         assert_eq!(result.priority, 20);
@@ -521,31 +561,9 @@ mod tests {
     fn fn_find_lowest_priority_returns_oldest_when_priorities_equal() {
         let mut list = FreezeFrameList::test_new();
 
-        // With equal priorities, find the oldest based on last_occurrence_time
-        // last_occurrence_time: 300, 100, 200
-        // Expected: event_id 2 (oldest, last_occurrence_time = 100)
-        let ff_newest = FreezeFrame {
-            event_id: 1,
-            priority: 10,
-            first_occurrence_time: 300,
-            last_occurrence_time: 300,
-        };
-        let ff_oldest = FreezeFrame {
-            event_id: 2,
-            priority: 10,
-            first_occurrence_time: 100,
-            last_occurrence_time: 100,
-        };
-        let ff_middle = FreezeFrame {
-            event_id: 3,
-            priority: 10,
-            first_occurrence_time: 200,
-            last_occurrence_time: 200,
-        };
-
-        list.insert(ff_newest).unwrap(); // index 0
-        list.insert(ff_oldest).unwrap(); // index 1
-        list.insert(ff_middle).unwrap(); // index 2
+        list.insert(create_freeze_frame(1, 10, 300, 300)).unwrap();
+        list.insert(create_freeze_frame(2, 10, 100, 100)).unwrap();
+        list.insert(create_freeze_frame(3, 10, 200, 200)).unwrap();
 
         let result = list.find_lowest_priority();
         assert_eq!(result.priority, 10);
@@ -556,24 +574,67 @@ mod tests {
     fn fn_find_lowest_priority_do_nothing_branch_when_newer() {
         let mut list = FreezeFrameList::test_new();
 
-        let freeze_frame1 = FreezeFrame {
-            event_id: 1,
-            priority: 10,
-            first_occurrence_time: 100,
-            last_occurrence_time: 100,
-        };
-        let freeze_frame2 = FreezeFrame {
-            event_id: 2,
-            priority: 10,
-            first_occurrence_time: 200,
-            last_occurrence_time: 200,
-        };
-
-        list.insert(freeze_frame1).unwrap();
-        list.insert(freeze_frame2).unwrap();
+        list.insert(create_freeze_frame(1, 10, 100, 100)).unwrap();
+        list.insert(create_freeze_frame(2, 10, 200, 200)).unwrap();
 
         let result = list.find_lowest_priority();
         assert_eq!(result.priority, 10);
         assert_eq!(list.iter().nth(result.index).unwrap().event_id, 1);
+    }
+
+    #[test]
+    fn fn_capture_snapshot_writes_data() {
+        let mut ff = create_freeze_frame(1, 10, 0, 0);
+
+        ff.capture_snapshot(|data| {
+            data[0] = 42;
+            data[1] = 0xAB;
+            data[254] = 255;
+        });
+
+        assert_eq!(ff.snapshot_data[0], 42);
+        assert_eq!(ff.snapshot_data[1], 0xAB);
+        assert_eq!(ff.snapshot_data[2], 0);
+        assert_eq!(ff.snapshot_data[254], 255);
+    }
+
+    #[test]
+    fn fn_capture_snapshot_overwrites_existing_data() {
+        let mut ff = create_freeze_frame(1, 10, 0, 0);
+        ff.snapshot_data = [0xFFu8; 255];
+
+        ff.capture_snapshot(|data| {
+            data[0] = 0;
+            data[1] = 0;
+        });
+
+        assert_eq!(ff.snapshot_data[0], 0);
+        assert_eq!(ff.snapshot_data[1], 0);
+        assert_eq!(ff.snapshot_data[2], 0xFF);
+    }
+
+    #[test]
+    fn fn_get_mut_returns_mutable_reference() {
+        let mut list = FreezeFrameList::test_new();
+        list.insert(create_freeze_frame(1, 10, 100, 200)).unwrap();
+
+        let ff = list.get_mut(0).unwrap();
+        assert_eq!(ff.event_id, 1);
+        assert_eq!(ff.first_occurrence_time, 100);
+
+        ff.last_occurrence_time = 300;
+        drop(ff);
+
+        let ff = list.get_mut(0).unwrap();
+        assert_eq!(ff.last_occurrence_time, 300);
+    }
+
+    #[test]
+    fn fn_get_mut_returns_none_for_out_of_bounds() {
+        let mut list = FreezeFrameList::test_new();
+        assert!(list.get_mut(0).is_none());
+
+        list.insert(create_freeze_frame(1, 10, 0, 0)).unwrap();
+        assert!(list.get_mut(1).is_none());
     }
 }

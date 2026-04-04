@@ -61,6 +61,8 @@ pub struct CalibConfig {
     pub aging_threshold: u8,
     /// Priority of this event in the ordered list.
     pub priority: u8,
-    /// Trigger condition for saving extended records.
+    /// Trigger condition for saving freeze frames.
     pub save_trigger: SaveTrigger,
+    /// allowance to update an existing freeze frame.
+    pub record_update: bool,
 }

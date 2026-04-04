@@ -83,7 +83,7 @@ impl EventManager {
             self.events[index].stop();
 
             if self.events[index].nv_config.aging_cycles
-                    >= self.events[index].cal_config.aging_threshold
+                >= self.events[index].cal_config.aging_threshold
             {
                 let event_id = index as EventId;
                 self.free_from_freeze_frames(event_id);
@@ -155,13 +155,16 @@ impl EventManager {
 
         if rising_edge {
             if let Some(existing) = self.freeze_frames.get_by_event_id_mut(event_id) {
-                existing.last_occurrence_time = timestamp;
+                if event.cal_config.record_update {
+                    existing.last_occurrence_time = timestamp;
+                }
             } else {
                 let freeze_frame = FreezeFrame {
                     event_id,
                     priority,
                     first_occurrence_time: timestamp,
                     last_occurrence_time: timestamp,
+                    snapshot_data: [0u8; 255],
                 };
                 self.freeze_frames.insert(freeze_frame)?;
             }

@@ -27,6 +27,8 @@ struct CalibFixture {
     aging_threshold: u8,
     priority: u8,
     save_trigger: Option<String>,
+    #[serde(default)]
+    record_update: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
