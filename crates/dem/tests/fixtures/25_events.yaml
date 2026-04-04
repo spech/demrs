@@ -1,4 +1,4 @@
-# 25-event fixture for testing ExtendedRecordList (capacity: 24)
+# 25-event fixture for testing FreezeFrameList (capacity: 24)
 # All events have uniform configuration for predictable testing:
 # - debounce_type: CounterBased
 # - debounce_behavior: Freeze
@@ -175,6 +175,7 @@ events:
       aging_threshold: 10
       priority: 14
       save_trigger: OnPdtc
+      record_update: false
 
   - id: 14
     name: "Event14"
@@ -294,7 +295,8 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 24
-      save_trigger: OnPdtc
+      save_trigger: OnTf
+      record_update: true
 
   - id: 24
     name: "Event24"
@@ -306,5 +308,5 @@ events:
       confirmation_threshold: 1
       aging_threshold: 10
       priority: 25
-      save_trigger: OnPdtc
+      save_trigger: OnTftoc
 

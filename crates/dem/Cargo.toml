@@ -6,6 +6,9 @@ edition = "2024"
 [lib]
 path = "src/lib.rs"
 
+[dependencies]
+spin = "0.9"
+
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
@@ -15,4 +18,5 @@ minijinja = { version = "2", features = ["loader"] }
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
+serial_test = "3"
 

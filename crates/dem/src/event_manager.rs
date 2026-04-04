@@ -5,11 +5,12 @@
 #[allow(unused_imports)]
 use crate::event::{Event, NvmConfig};
 #[allow(unused_imports)]
-use crate::event_config::{CalibConfig, DebounceBehavior, DebounceType, SaveTrigger};
-use crate::extended_record::{
-    EventId, ExtendedRecord, ExtendedRecordList, ExtendedRecordListError,
+use crate::event_config::{
+    CalibConfig, DebounceBehavior, DebounceType, SaveTrigger, SnapshotConfig, SNAPSHOT_DATA_SIZE,
 };
+use crate::freeze_frame::{EventId, FreezeFrame, FreezeFrameList, FreezeFrameListError};
 use crate::UdsStatusByte;
+use spin::Mutex;
 
 /// Runtime state of the EventManager.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,38 +28,44 @@ pub enum EventManagerError {
     EventStepError,
     /// The EventManager is not initialized (state is Off).
     NotInitializedError,
-    /// An error occurred while updating the extended records storage.
-    ExtendedRecordError(ExtendedRecordListError),
+    /// An error occurred while updating the freeze frames storage.
+    FreezeFrameError(FreezeFrameListError),
 }
 
-impl From<ExtendedRecordListError> for EventManagerError {
-    fn from(err: ExtendedRecordListError) -> Self {
-        EventManagerError::ExtendedRecordError(err)
+impl From<FreezeFrameListError> for EventManagerError {
+    fn from(err: FreezeFrameListError) -> Self {
+        EventManagerError::FreezeFrameError(err)
     }
 }
 
-/// Manages a collection of [`Event`]s and their associated [`ExtendedRecord`] data.
+/// Manages a collection of [`Event`]s and their associated [`FreezeFrame`] data.
 ///
 /// The `EventManager` coordinates debouncing logic and persistent storage
 /// for diagnostic event handling. It holds references to static event data
-/// and extended records that persist across power cycles.
+/// and freeze frames that persist across power cycles.
 ///
 /// ## Storage
 ///
 /// - `events` - Slice of [`Event`] instances with fixed static addresses
-/// - `extended_records` - Reference to [`ExtendedRecordList`] for persistent metadata
+/// - `freeze_frames` - Reference to [`FreezeFrameList`] for persistent metadata
+/// - `snapshot_config` - Reference to [`SnapshotConfig`] for snapshot data sources
 ///
-/// ## Usage
+/// ## Thread Safety
 ///
-/// Create an `EventManager` by passing static references to event data
-/// and extended records storage.
+/// Freeze frame operations are protected by a spin mutex to prevent race conditions
+/// during interrupt-driven scenarios where multiple events may attempt to modify
+/// the freeze frame storage concurrently.
 pub struct EventManager {
     /// Slice of [`Event`] instances at fixed static addresses.
     pub events: &'static mut [Event],
-    /// Reference to [`ExtendedRecordList`] for persistent metadata.
-    pub extended_records: &'static mut ExtendedRecordList,
+    /// Reference to [`FreezeFrameList`] for persistent metadata.
+    pub freeze_frames: &'static mut FreezeFrameList,
+    /// Reference to [`SnapshotConfig`] for snapshot data sources.
+    pub snapshot_config: &'static SnapshotConfig,
     /// Runtime state of the EventManager.
     pub state: EventManagerState,
+    /// Mutex to protect freeze frame operations from concurrent access.
+    pub freeze_frames_lock: Mutex<()>,
 }
 
 impl EventManager {
@@ -77,38 +84,36 @@ impl EventManager {
     ///
     /// Sets the state to [`EventManagerState::Off`].
     /// Calls [`Event::stop()`] on each event to update cycle counters and disable them.
-    /// If a falling edge is detected on the save_trigger status bit, the corresponding
-    /// extended record is freed.
+    /// If aging threshold is reached, the corresponding freeze frame is freed.
     pub fn stop(&mut self) {
         self.state = EventManagerState::Off;
         let len = self.events.len();
         for index in 0..len {
-            let save_trigger = self.events[index].cal_config.save_trigger;
-            let old_status = self.events[index].uds_status_old;
             let new_status = self.events[index].stop();
 
-            let falling_edge = match save_trigger {
-                SaveTrigger::OnCdtc => !new_status.cdtc() && old_status.cdtc(),
-                SaveTrigger::OnPdtc => !new_status.pdtc() && old_status.pdtc(),
-            };
-
-            if falling_edge {
+            if !new_status.tftoc()
+                && !new_status.tnctoc()
+                && new_status.cdtc()
+                && self.events[index].nv_config.aging_cycles
+                    >= self.events[index].cal_config.aging_threshold
+            {
                 let event_id = index as EventId;
-                self.free_from_extended_records(event_id);
+                self.free_from_freeze_frames(event_id);
             }
         }
     }
 
-    /// Clears fault memory by calling `clear()` on all events and removing all extended records.
+    /// Clears fault memory by calling `clear()` on all events and removing all freeze frames.
     ///
     /// This is typically called in response to a "Clear DTC" request (e.g., OBD service $04).
     pub fn clear(&mut self) {
         for event in self.events.iter_mut() {
             event.clear();
+            event.nv_config.uds_status = UdsStatusByte::from_raw(0);
+            event.uds_status_old = UdsStatusByte::from_raw(0);
         }
-        while !self.extended_records.is_empty() {
-            self.extended_records.remove(0);
-        }
+        let _lock = self.freeze_frames_lock.lock();
+        self.freeze_frames.clear();
     }
 
     /// Advances the specified event by one step.
@@ -137,12 +142,29 @@ impl EventManager {
             .map_err(|_| EventManagerError::EventStepError)?;
         let new_status = event.nv_config.uds_status;
 
-        self.store_in_extended_records(index, timestamp)?;
+        self.store_in_freeze_frames(index, timestamp)?;
 
         Ok(new_status)
     }
 
-    fn store_in_extended_records(
+    fn auto_capture_snapshot(&self, buffer: &mut [u8; SNAPSHOT_DATA_SIZE]) {
+        let mut offset = 0usize;
+        for i in 0..self.snapshot_config.count as usize {
+            let src = &self.snapshot_config.sources[i];
+            if src.size > 0 {
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        src.address,
+                        buffer.as_mut_ptr().add(offset),
+                        src.size as usize,
+                    );
+                }
+                offset += src.size as usize;
+            }
+        }
+    }
+
+    fn store_in_freeze_frames(
         &mut self,
         index: usize,
         timestamp: u32,
@@ -155,28 +177,39 @@ impl EventManager {
         let new_status = event.nv_config.uds_status;
 
         let rising_edge = match save_trigger {
-            SaveTrigger::OnCdtc => new_status.cdtc() && !old_status.cdtc(),
             SaveTrigger::OnPdtc => new_status.pdtc() && !old_status.pdtc(),
+            SaveTrigger::OnCdtc => new_status.cdtc() && !old_status.cdtc(),
+            SaveTrigger::OnTf => new_status.tf() && !old_status.tf(),
+            SaveTrigger::OnTftoc => new_status.tftoc() && !old_status.tftoc(),
         };
 
         if rising_edge {
-            if let Some(existing) = self.extended_records.get_by_event_id_mut(event_id) {
-                existing.date_at_last_save = timestamp;
+            let mut snapshot = [0u8; SNAPSHOT_DATA_SIZE];
+            self.auto_capture_snapshot(&mut snapshot);
+
+            let _lock = self.freeze_frames_lock.lock();
+
+            if let Some(existing) = self.freeze_frames.get_by_event_id_mut(event_id) {
+                if event.cal_config.record_update {
+                    existing.last_occurrence_time = timestamp;
+                    existing.snapshot_data = snapshot;
+                }
             } else {
-                let ext_rec = ExtendedRecord {
+                let freeze_frame = FreezeFrame {
                     event_id,
                     priority,
-                    date_at_first_save: timestamp,
-                    date_at_last_save: timestamp,
+                    first_occurrence_time: timestamp,
+                    last_occurrence_time: timestamp,
+                    snapshot_data: snapshot,
                 };
-                self.extended_records.insert(ext_rec)?;
+                self.freeze_frames.insert(freeze_frame)?;
             }
         }
 
         Ok(())
     }
 
-    /// Frees (removes) an entry from the extended records list by event ID.
+    /// Frees (removes) an entry from the freeze frames list by event ID.
     ///
     /// If an entry with the given event ID exists, it is removed.
     /// If no entry exists with that event ID, this function does nothing.
@@ -184,14 +217,15 @@ impl EventManager {
     /// # Arguments
     ///
     /// * `event_id` - The event ID of the entry to free.
-    pub fn free_from_extended_records(&mut self, event_id: EventId) {
+    pub fn free_from_freeze_frames(&mut self, event_id: EventId) {
+        let _lock = self.freeze_frames_lock.lock();
         let index_to_remove = self
-            .extended_records
+            .freeze_frames
             .iter()
             .position(|rec| rec.event_id == event_id);
 
         if let Some(index) = index_to_remove {
-            self.extended_records.remove(index);
+            self.freeze_frames.remove(index);
         }
     }
 }

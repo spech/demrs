@@ -6,10 +6,34 @@
 pub mod {{ fixture.module_name }} {
     use crate::CalibConfig;
     use crate::event::{Event, NvmConfig};
-    use crate::event_config::{DebounceBehavior, DebounceType, SaveTrigger};
+    use crate::event_config::{DebounceBehavior, DebounceType, SaveTrigger, SnapshotConfig, SnapshotSource};
     use crate::event_manager::{EventManager, EventManagerState};
-    use crate::ExtendedRecordList;
+    use crate::FreezeFrameList;
     use crate::UdsStatusByte;
+
+{% if fixture.snapshot_sources %}
+// Snapshot source static variables
+{% for source in fixture.snapshot_sources %}
+    static {{ source.name }}: u{{ source.size * 8 }} = 0;
+{% endfor %}
+
+    const SNAPSHOT_CONFIG: SnapshotConfig = SnapshotConfig {
+        sources: [
+{% for source in fixture.snapshot_sources %}
+            SnapshotSource { address: &{{ source.name }} as *const _ as *const u8, size: {{ source.size }} },
+{% endfor %}
+{% for _ in range(fixture.snapshot_sources|length, 255) %}
+            SnapshotSource { address: core::ptr::null(), size: 0 },
+{% endfor %}
+        ],
+        count: {{ fixture.snapshot_sources|length }},
+    };
+{% else %}
+    const SNAPSHOT_CONFIG: SnapshotConfig = SnapshotConfig {
+        sources: [const { SnapshotSource { address: core::ptr::null(), size: 0 } }; 255],
+        count: 0,
+    };
+{% endif %}
 
 {% for event in fixture.events %}
     pub static mut NVM_CONFIG_{{ loop.index0 }}: NvmConfig = NvmConfig {
@@ -27,13 +51,14 @@ pub mod {{ fixture.module_name }} {
         confirmation_threshold: {{ event.calib.confirmation_threshold }},
         aging_threshold: {{ event.calib.aging_threshold }},
         priority: {{ event.calib.priority }},
-        save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnCdtc' }},
+        save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnTftoc' }},
+        record_update: {{ 'true' if event.calib.record_update == true else 'false' }},
     };
 {% endfor %}
 
-    const EXTENDED_RECORDS_NVM: [Option<crate::ExtendedRecord>; 24] = [const { None }; 24];
+    const FREEZE_FRAMES_NVM: [Option<crate::FreezeFrame>; 24] = [const { None }; 24];
 
-    static mut EXTENDED_RECORDS: ExtendedRecordList = ExtendedRecordList::from_nvm(&EXTENDED_RECORDS_NVM);
+    static mut FREEZE_FRAMES: FreezeFrameList = FreezeFrameList::from_nvm(&FREEZE_FRAMES_NVM);
 
     static mut ALL_EVENTS: [Event; {{ fixture.events|length }}] = [
 {% for event in fixture.events %}
@@ -49,8 +74,10 @@ pub mod {{ fixture.module_name }} {
 
     pub static mut EVENT_MANAGER: EventManager = EventManager {
         events: unsafe { core::slice::from_raw_parts_mut(&raw mut ALL_EVENTS as *mut Event, {{ fixture.events|length }}) },
-        extended_records: unsafe { &mut *(&raw mut EXTENDED_RECORDS) },
+        freeze_frames: unsafe { &mut *(&raw mut FREEZE_FRAMES) },
+        snapshot_config: &SNAPSHOT_CONFIG,
         state: EventManagerState::Off,
+        freeze_frames_lock: spin::Mutex::new(()),
     };
 
     pub const EVENT_COUNT: usize = {{ fixture.events|length }};

@@ -10,9 +10,9 @@ This is an embedded automotive project with persistent (non-volatile) data struc
   - `aging_cycles`: Cycle counter for DTC aging
   - `occurence_cntr`: Failure occurrence counter
 
-- **`ExtendedRecordList`**: Persistent storage for extended records (24 slots)
+- **`FreezeFrameList`**: Persistent storage for freeze frames (24 slots)
 
-Both `NvmConfig` and `ExtendedRecordList` persist across power cycles. They are stored in NVM and are **not cleared** by `reset_event_manager()`. Only the working registers (debounce counter, etc.) are reset.
+Both `NvmConfig` and `FreezeFrameList` persist across power cycles. They are stored in NVM and are **not cleared** by `clear()`. Only the working registers (debounce counter, etc.) are reset.
 
 When writing tests for functions that modify persistent state, be aware that:
 - Tests may need to set up initial `NvmConfig` values before calling `init()`
@@ -55,7 +55,7 @@ Integration test names must follow the `bdd_<subject>_<scenario>` pattern:
 
 ```rust
 #[test]
-fn bdd_extended_record_list_full_eviction() {
+fn bdd_freeze_frame_list_full_eviction() {
     // ...
 }
 ```
@@ -69,5 +69,5 @@ fn bdd_extended_record_list_full_eviction() {
 **Examples:**
 | Good | Bad |
 |------|-----|
-| `bdd_extended_record_list_full_eviction` | `test_extended_record_list_full` |
-| `bdd_extended_record_list_onpdtc_trigger` | `save_trigger_onpdtc_creates_extended_record_on_pdtc_rising` |
+| `bdd_freeze_frame_list_full_eviction` | `test_freeze_frame_list_full` |
+| `bdd_freeze_frame_list_onpdtc_trigger` | `save_trigger_onpdtc_creates_freeze_frame_on_pdtc_rising` |

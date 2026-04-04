@@ -1,0 +1,10 @@
+# Snapshot data sources configuration
+# Variables are declared and their addresses are captured
+
+sources:
+  - name: VOLTAGE
+    size: 2
+  - name: TEMP
+    size: 1
+  - name: RPM
+    size: 2
