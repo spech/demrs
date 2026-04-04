@@ -6,6 +6,9 @@ edition = "2024"
 [lib]
 path = "src/lib.rs"
 
+[dependencies]
+spin = "0.9"
+
 [build-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"

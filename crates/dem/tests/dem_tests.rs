@@ -85,6 +85,7 @@ fn bdd_freeze_frame_list_full_eviction() {
         freeze_frames: ff_list,
         snapshot_config: create_empty_snapshot_config(),
         state: EventManagerState::Off,
+        freeze_frames_lock: spin::Mutex::new(()),
     };
 
     manager.init();
@@ -172,6 +173,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         freeze_frames: ff_list,
         snapshot_config: create_empty_snapshot_config(),
         state: EventManagerState::Off,
+        freeze_frames_lock: spin::Mutex::new(()),
     };
 
     manager.init();

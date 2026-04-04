@@ -77,6 +77,7 @@ pub mod {{ fixture.module_name }} {
         freeze_frames: unsafe { &mut *(&raw mut FREEZE_FRAMES) },
         snapshot_config: &SNAPSHOT_CONFIG,
         state: EventManagerState::Off,
+        freeze_frames_lock: spin::Mutex::new(()),
     };
 
     pub const EVENT_COUNT: usize = {{ fixture.events|length }};

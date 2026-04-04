@@ -10,6 +10,7 @@ use crate::event_config::{
 };
 use crate::freeze_frame::{EventId, FreezeFrame, FreezeFrameList, FreezeFrameListError};
 use crate::UdsStatusByte;
+use spin::Mutex;
 
 /// Runtime state of the EventManager.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,10 +50,11 @@ impl From<FreezeFrameListError> for EventManagerError {
 /// - `freeze_frames` - Reference to [`FreezeFrameList`] for persistent metadata
 /// - `snapshot_config` - Reference to [`SnapshotConfig`] for snapshot data sources
 ///
-/// ## Usage
+/// ## Thread Safety
 ///
-/// Create an `EventManager` by passing static references to event data
-/// and freeze frames storage.
+/// Freeze frame operations are protected by a spin mutex to prevent race conditions
+/// during interrupt-driven scenarios where multiple events may attempt to modify
+/// the freeze frame storage concurrently.
 pub struct EventManager {
     /// Slice of [`Event`] instances at fixed static addresses.
     pub events: &'static mut [Event],
@@ -62,6 +64,8 @@ pub struct EventManager {
     pub snapshot_config: &'static SnapshotConfig,
     /// Runtime state of the EventManager.
     pub state: EventManagerState,
+    /// Mutex to protect freeze frame operations from concurrent access.
+    pub freeze_frames_lock: Mutex<()>,
 }
 
 impl EventManager {
@@ -108,6 +112,7 @@ impl EventManager {
             event.nv_config.uds_status = UdsStatusByte::from_raw(0);
             event.uds_status_old = UdsStatusByte::from_raw(0);
         }
+        let _lock = self.freeze_frames_lock.lock();
         self.freeze_frames.clear();
     }
 
@@ -182,6 +187,8 @@ impl EventManager {
             let mut snapshot = [0u8; SNAPSHOT_DATA_SIZE];
             self.auto_capture_snapshot(&mut snapshot);
 
+            let _lock = self.freeze_frames_lock.lock();
+
             if let Some(existing) = self.freeze_frames.get_by_event_id_mut(event_id) {
                 if event.cal_config.record_update {
                     existing.last_occurrence_time = timestamp;
@@ -211,6 +218,7 @@ impl EventManager {
     ///
     /// * `event_id` - The event ID of the entry to free.
     pub fn free_from_freeze_frames(&mut self, event_id: EventId) {
+        let _lock = self.freeze_frames_lock.lock();
         let index_to_remove = self
             .freeze_frames
             .iter()
