@@ -60,6 +60,8 @@ pub mod {{ fixture.module_name }} {
 
     static mut FREEZE_FRAMES: FreezeFrameList = FreezeFrameList::from_nvm(&FREEZE_FRAMES_NVM);
 
+    static mut TIMESTAMP: u32 = 0;
+
     static mut ALL_EVENTS: [Event; {{ fixture.events|length }}] = [
 {% for event in fixture.events %}
         Event {
@@ -78,6 +80,7 @@ pub mod {{ fixture.module_name }} {
         snapshot_config: &SNAPSHOT_CONFIG,
         state: EventManagerState::Off,
         freeze_frames_lock: spin::Mutex::new(()),
+        timestamp: unsafe { &mut *(&raw mut TIMESTAMP) },
     };
 
     pub const EVENT_COUNT: usize = {{ fixture.events|length }};

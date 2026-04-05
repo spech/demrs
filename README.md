@@ -36,11 +36,19 @@ readings to confirm a fault:
 ```
 [Not Complete] → [PreFailed/PrePassed] → [Confirmed]
                         ↓                      ↓
-                   [Healed] ← ← ← ← [Pending] → [Aged] → [Cleared]
+     [Healed] ← ← ← ← [Pending] → [Aged] → [Cleared]
 ```
 
 - **PDTC (Pending DTC)** - Temporary fault indicator
 - **CDTC (Confirmed DTC)** - Fully confirmed fault requiring service
+
+### Freeze Frames
+
+Freeze frames capture a snapshot of system state when a diagnostic event occurs. They provide context for debugging by storing:
+- Sensor values (voltage, RPM, speed, temperatures)
+- System conditions at the time of fault detection
+
+Freeze frames are stored persistently and survive power cycles. The DEM supports up to 24 freeze frames, prioritized by event priority.
 
 ### Status Byte Flags
 
@@ -98,7 +106,21 @@ confirmator = "0.1"
 
 ## Usage Examples
 
-<!-- TODO: Add usage examples for each crate -->
+### DEM TUI
+
+An interactive terminal UI for observing and interacting with the DEM library.
+
+**Run the TUI:**
+
+```bash
+cargo run --example dem_tui -p dem
+```
+
+**Features:**
+- Interactive TUI with live system state display
+- 25 configurable diagnostic events with UDS status tracking
+- Freeze frame storage with physical and raw hex views
+- Press `?` in the TUI to see all keyboard controls
 
 ## Development
 
