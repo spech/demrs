@@ -109,10 +109,11 @@ cargo run --example dem_tui -p dem
 ```
 
 **Features:**
-- View all events with real-time UDS status flags (TF, TFTOC, PDTC, CDTC)
+- View 25 events with real-time UDS status flags (TF, TFTOC, PDTC, CDTC)
 - See debounce counter values and NVM statistics (occurrence, aging, confirmation cycles)
-- Edit CalibConfig parameters at runtime (step_up/down, debounce type/behavior, thresholds, etc.)
-- View stored freeze frames with hex dump of snapshot data
+- Edit CalibConfig parameters at runtime using Up/Down arrows
+- View stored freeze frames with physical snapshot data
+- Snapshot detail panel shows raw hex data
 - Manual operating cycle simulation (stop/init cycles)
 - Trigger events via keyboard shortcuts
 - Press `?` to show the keyboard shortcuts legend
@@ -121,9 +122,11 @@ cargo run --example dem_tui -p dem
 
 | Key | Action |
 |-----|--------|
-| `1-9` | Trigger PreFailed on Event 0-8 |
-| `Shift+1-9` | Trigger PrePassed on Event 0-8 |
-| `Ctrl+1-9` | Trigger immediate Failed on Event 0-8 |
+| `Space` | Select event for triggering (highlighted in teal) |
+| `1` | Trigger PreFailed on selected event |
+| `2` | Trigger Failed on selected event |
+| `3` | Trigger PrePassed on selected event |
+| `4` | Trigger Passed on selected event |
 | `↑/↓` | Navigate between events or freeze frames |
 | `PgUp/PgDn` | Scroll the details panel |
 | `I` | Initialize operating cycle |
@@ -131,16 +134,21 @@ cargo run --example dem_tui -p dem
 | `N` | Advance to next cycle (stop + init) |
 | `C` | Clear all events and freeze frames |
 | `F` | Toggle freeze frames panel |
+| `R` | Toggle raw/physical snapshot view (in freeze frames panel) |
 | `E` | Edit CalibConfig for selected event |
-| `D` | Delete selected freeze frame |
 | `?` / `H` | Show/hide help overlay |
 | `Q` | Quit |
 
+**Event Selection:**
+- Use `↑/↓` to navigate and view event details
+- Press `Space` to select an event for triggering (shown in teal)
+- Selected event persists until a new selection
+
 **Editing CalibConfig:**
 1. Press `E` to enter edit mode
-2. Use `Tab` to cycle through fields (step_up, step_down, debounce_type, debounce_behavior, confirmation_threshold, aging_threshold, priority, save_trigger, record_update)
-3. Type the new value
-4. Press `Enter` to apply, `Esc` to cancel
+2. Use `↑/↓` to change values (applies immediately)
+3. Use `Tab` to cycle through fields (step_up, step_down, debounce_type, debounce_behavior, confirmation_threshold, aging_threshold, priority, save_trigger, record_update)
+4. Press `Esc` to cancel and exit edit mode
 
 ## Development
 

@@ -6,17 +6,45 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{
-        Block, Borders, Clear, List, ListItem, Paragraph, Row, Scrollbar, ScrollbarOrientation,
-        ScrollbarState, Table,
+        Block, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Scrollbar,
+        ScrollbarOrientation, ScrollbarState, Table,
     },
     Terminal,
 };
 use std::io;
 use std::time::{Duration, Instant};
+
+static EVENT_NAMES: [&str; 25] = [
+    "OverTemp",
+    "UnderVolt",
+    "OverSpeed",
+    "LowFuel",
+    "BrakeFail",
+    "SensorErr",
+    "CommFault",
+    "OilPress",
+    "Coolant",
+    "Catalyst",
+    "O2Sensor",
+    "EGR",
+    "VVT",
+    "Turbo",
+    "AFRatio",
+    "MAFSensor",
+    "Ignition",
+    "Knock",
+    "EVAP",
+    "Thermostat",
+    "Battery",
+    "Alternator",
+    "ABS",
+    "Airbag",
+    "TransGear",
+];
 
 mod theme {
     use ratatui::style::Color;
@@ -42,7 +70,103 @@ use spin::Mutex;
 
 static mut FF_LIST_NVM: [Option<FreezeFrame>; 24] = [const { None }; 24];
 
-static mut EVENT_NVM: [NvmConfig; 9] = [
+static mut EVENT_NVM: [NvmConfig; 25] = [
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
+    NvmConfig {
+        uds_status: UdsStatusByte::from_raw(0b0100_0000),
+        occurence_cntr: 0,
+        aging_cycles: 0,
+        confirmation_cycles: 0,
+    },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
@@ -124,6 +248,13 @@ struct SystemState {
     throttle_position: u8,
     obd_cycle_counter: u16,
     system_mode: u8,
+    fuel_level: u8,
+    oil_pressure: u16,
+    transmission_temp: u8,
+    exhaust_temp: u8,
+    maf_rate: u16,
+    dyno_load: u8,
+    fuel_pressure: u8,
 }
 
 static mut SYSTEM_STATE: SystemState = SystemState {
@@ -135,6 +266,13 @@ static mut SYSTEM_STATE: SystemState = SystemState {
     throttle_position: 0,
     obd_cycle_counter: 0,
     system_mode: 0x01,
+    fuel_level: 75,
+    oil_pressure: 45,
+    transmission_temp: 70,
+    exhaust_temp: 80,
+    maf_rate: 15,
+    dyno_load: 50,
+    fuel_pressure: 50,
 };
 
 static mut SYSTEM_STATE_OLD: SystemState = SystemState {
@@ -146,23 +284,38 @@ static mut SYSTEM_STATE_OLD: SystemState = SystemState {
     throttle_position: 0,
     obd_cycle_counter: 0,
     system_mode: 0x01,
+    fuel_level: 75,
+    oil_pressure: 45,
+    transmission_temp: 70,
+    exhaust_temp: 80,
+    maf_rate: 15,
+    dyno_load: 50,
+    fuel_pressure: 50,
 };
 
 fn update_live_system_state(tick: u32) {
     unsafe {
         SYSTEM_STATE_OLD = SYSTEM_STATE;
 
-        SYSTEM_STATE.battery_voltage_x10 = 118 + ((tick * 7) % 10) as u8;
+        SYSTEM_STATE.battery_voltage_x10 = 118_u8.saturating_add(((tick % 10) * 7 % 10) as u8);
 
         let base_rpm = 800 + (tick % 600);
-        let variation = ((tick * 37) % 200) as i16 - 100;
+        let variation = (((tick % 200) * 37 % 200) as i16) - 100;
         SYSTEM_STATE.engine_rpm = (base_rpm as i16 + variation) as u16;
 
-        SYSTEM_STATE.vehicle_speed = ((tick * 13) % 180) as u16;
-        SYSTEM_STATE.coolant_temp = 75 + ((tick * 3) % 35) as u8;
-        SYSTEM_STATE.intake_air_temp = 20 + ((tick * 5) % 25) as u8;
-        SYSTEM_STATE.throttle_position = ((tick * 17) % 100) as u8;
+        SYSTEM_STATE.vehicle_speed = ((tick % 180) * 13 % 180) as u16;
+        SYSTEM_STATE.coolant_temp = 75_u8.saturating_add(((tick % 35) * 3 % 35) as u8);
+        SYSTEM_STATE.intake_air_temp = 20_u8.saturating_add(((tick % 25) * 5 % 25) as u8);
+        SYSTEM_STATE.throttle_position = ((tick % 100) * 17 % 100) as u8;
         SYSTEM_STATE.obd_cycle_counter = (tick / 60) as u16;
+
+        SYSTEM_STATE.fuel_level = 75_u8.saturating_sub(((tick % 15) * 2 % 30) as u8);
+        SYSTEM_STATE.oil_pressure = 45_u16.saturating_add(((tick % 20) * 7 % 140) as u16);
+        SYSTEM_STATE.transmission_temp = 70_u8.saturating_add(((tick % 10) * 5 % 40) as u8);
+        SYSTEM_STATE.exhaust_temp = 80_u8.saturating_add(((tick % 20) * 11 % 200) as u8);
+        SYSTEM_STATE.maf_rate = 15_u16.saturating_add(((tick % 20) * 3 % 60) as u16);
+        SYSTEM_STATE.dyno_load = 50_u8.saturating_add(((tick % 10) * 13 % 130) as u8);
+        SYSTEM_STATE.fuel_pressure = 50_u8.saturating_add(((tick % 15) * 17 % 205) as u8);
     }
 }
 
@@ -181,11 +334,11 @@ struct App {
     viewed_event: usize,
     trigger_event: Option<usize>,
     show_freeze_frames: bool,
+    show_raw_snapshot: bool,
     selected_ff: Option<usize>,
     editing_calib: bool,
     editing_field: usize,
     last_action: String,
-    input_buffer: String,
     ff_scroll: usize,
     scroll: usize,
     show_help: bool,
@@ -296,6 +449,182 @@ impl App {
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
             },
+            CalibConfig {
+                step_up: 2,
+                step_down: 1,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 4,
+                priority: 10,
+                save_trigger: SaveTrigger::OnPdtc,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 4,
+                step_down: 2,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 6,
+                priority: 11,
+                save_trigger: SaveTrigger::OnTf,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 6,
+                step_down: 3,
+                debounce_behavior: DebounceBehavior::Reset,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 7,
+                priority: 12,
+                save_trigger: SaveTrigger::OnCdtc,
+                record_update: false,
+            },
+            CalibConfig {
+                step_up: 1,
+                step_down: 0,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 3,
+                priority: 13,
+                save_trigger: SaveTrigger::OnTftoc,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 8,
+                step_down: 0,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::TimeBased,
+                confirmation_threshold: 1,
+                aging_threshold: 8,
+                priority: 14,
+                save_trigger: SaveTrigger::OnPdtc,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 3,
+                step_down: 0,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 4,
+                priority: 15,
+                save_trigger: SaveTrigger::OnCdtc,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 5,
+                step_down: 5,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 6,
+                priority: 16,
+                save_trigger: SaveTrigger::OnTf,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 2,
+                step_down: 0,
+                debounce_behavior: DebounceBehavior::Reset,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 5,
+                priority: 17,
+                save_trigger: SaveTrigger::OnPdtc,
+                record_update: false,
+            },
+            CalibConfig {
+                step_up: 1,
+                step_down: 0,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::TimeBased,
+                confirmation_threshold: 1,
+                aging_threshold: 3,
+                priority: 18,
+                save_trigger: SaveTrigger::OnCdtc,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 7,
+                step_down: 1,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 9,
+                priority: 19,
+                save_trigger: SaveTrigger::OnTf,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 4,
+                step_down: 0,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 5,
+                priority: 20,
+                save_trigger: SaveTrigger::OnTftoc,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 1,
+                step_down: 1,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 4,
+                priority: 21,
+                save_trigger: SaveTrigger::OnCdtc,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 9,
+                step_down: 0,
+                debounce_behavior: DebounceBehavior::Reset,
+                debounce_type: DebounceType::TimeBased,
+                confirmation_threshold: 1,
+                aging_threshold: 10,
+                priority: 22,
+                save_trigger: SaveTrigger::OnPdtc,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 2,
+                step_down: 2,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 6,
+                priority: 23,
+                save_trigger: SaveTrigger::OnTf,
+                record_update: false,
+            },
+            CalibConfig {
+                step_up: 3,
+                step_down: 0,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::CounterBased,
+                confirmation_threshold: 1,
+                aging_threshold: 4,
+                priority: 24,
+                save_trigger: SaveTrigger::OnCdtc,
+                record_update: true,
+            },
+            CalibConfig {
+                step_up: 1,
+                step_down: 0,
+                debounce_behavior: DebounceBehavior::Freeze,
+                debounce_type: DebounceType::TimeBased,
+                confirmation_threshold: 1,
+                aging_threshold: 3,
+                priority: 25,
+                save_trigger: SaveTrigger::OnPdtc,
+                record_update: true,
+            },
         ];
 
         let events: Vec<Event> = cal_configs
@@ -334,11 +663,11 @@ impl App {
             viewed_event: 0,
             trigger_event: None,
             show_freeze_frames: false,
+            show_raw_snapshot: false,
             selected_ff: None,
             editing_calib: false,
             editing_field: 0,
             last_action: "Ready".to_string(),
-            input_buffer: String::new(),
             ff_scroll: 0,
             scroll: 0,
             show_help: false,
@@ -368,12 +697,21 @@ impl App {
             SNAPSHOT_DATA[7] = state.throttle_position;
             SNAPSHOT_DATA[8] = state.obd_cycle_counter as u8;
             SNAPSHOT_DATA[9] = (state.obd_cycle_counter >> 8) as u8;
-            SNAPSHOT_DATA[10] = match status {
+            SNAPSHOT_DATA[10] = state.fuel_level;
+            SNAPSHOT_DATA[11] = state.oil_pressure as u8;
+            SNAPSHOT_DATA[12] = (state.oil_pressure >> 8) as u8;
+            SNAPSHOT_DATA[13] = state.transmission_temp;
+            SNAPSHOT_DATA[14] = state.exhaust_temp;
+            SNAPSHOT_DATA[15] = state.maf_rate as u8;
+            SNAPSHOT_DATA[16] = (state.maf_rate >> 8) as u8;
+            SNAPSHOT_DATA[17] = state.dyno_load;
+            SNAPSHOT_DATA[18] = state.fuel_pressure;
+            SNAPSHOT_DATA[19] = match status {
                 Status::Failed | Status::PreFailed => 0x02,
                 _ => 0x01,
             };
 
-            for i in 11..255 {
+            for i in 20..255 {
                 SNAPSHOT_DATA[i] = 0;
             }
         }
@@ -433,81 +771,106 @@ impl App {
         }
     }
 
-    fn apply_calib_edit(&mut self, value: &str) {
+    fn adjust_calib_value(&mut self, increment: bool) {
         let event = &mut self.manager.events[self.viewed_event];
         match self.editing_field {
             0 => {
-                if let Ok(v) = value.parse::<i16>() {
-                    event.cal_config.step_up = v;
-                    self.last_action = format!("Set step_up to {}", v);
-                }
+                let new_val = if increment {
+                    event.cal_config.step_up.saturating_add(1)
+                } else {
+                    event.cal_config.step_up.saturating_sub(1)
+                };
+                event.cal_config.step_up = new_val;
+                self.last_action = format!("step_up: {}", new_val);
             }
             1 => {
-                if let Ok(v) = value.parse::<i16>() {
-                    event.cal_config.step_down = v;
-                    self.last_action = format!("Set step_down to {}", v);
-                }
+                let new_val = if increment {
+                    event.cal_config.step_down.saturating_add(1)
+                } else {
+                    event.cal_config.step_down.saturating_sub(1)
+                };
+                event.cal_config.step_down = new_val;
+                self.last_action = format!("step_down: {}", new_val);
             }
             2 => {
-                if value.to_lowercase() == "timebased" {
-                    event.cal_config.debounce_type = DebounceType::TimeBased;
-                    self.last_action = "Set debounce_type to TimeBased".to_string();
-                } else {
-                    event.cal_config.debounce_type = DebounceType::CounterBased;
-                    self.last_action = "Set debounce_type to CounterBased".to_string();
-                }
+                event.cal_config.debounce_type =
+                    if event.cal_config.debounce_type == DebounceType::CounterBased {
+                        DebounceType::TimeBased
+                    } else {
+                        DebounceType::CounterBased
+                    };
+                self.last_action = format!("debounce_type: {:?}", event.cal_config.debounce_type);
             }
             3 => {
-                if value.to_lowercase() == "reset" {
-                    event.cal_config.debounce_behavior = DebounceBehavior::Reset;
-                    self.last_action = "Set debounce_behavior to Reset".to_string();
-                } else {
-                    event.cal_config.debounce_behavior = DebounceBehavior::Freeze;
-                    self.last_action = "Set debounce_behavior to Freeze".to_string();
-                }
+                event.cal_config.debounce_behavior =
+                    if event.cal_config.debounce_behavior == DebounceBehavior::Freeze {
+                        DebounceBehavior::Reset
+                    } else {
+                        DebounceBehavior::Freeze
+                    };
+                self.last_action = format!(
+                    "debounce_behavior: {:?}",
+                    event.cal_config.debounce_behavior
+                );
             }
             4 => {
-                if let Ok(v) = value.parse::<u8>() {
-                    event.cal_config.confirmation_threshold = v;
-                    self.last_action = format!("Set confirmation_threshold to {}", v);
-                }
+                let new_val = if increment {
+                    event.cal_config.confirmation_threshold.saturating_add(1)
+                } else {
+                    event.cal_config.confirmation_threshold.saturating_sub(1)
+                };
+                event.cal_config.confirmation_threshold = new_val;
+                self.last_action = format!("confirmation_threshold: {}", new_val);
             }
             5 => {
-                if let Ok(v) = value.parse::<u8>() {
-                    event.cal_config.aging_threshold = v;
-                    self.last_action = format!("Set aging_threshold to {}", v);
-                }
+                let new_val = if increment {
+                    event.cal_config.aging_threshold.saturating_add(1)
+                } else {
+                    event.cal_config.aging_threshold.saturating_sub(1)
+                };
+                event.cal_config.aging_threshold = new_val;
+                self.last_action = format!("aging_threshold: {}", new_val);
             }
             6 => {
-                if let Ok(v) = value.parse::<u8>() {
-                    event.cal_config.priority = v;
-                    self.last_action = format!("Set priority to {}", v);
-                }
+                let new_val = if increment {
+                    event.cal_config.priority.saturating_add(1).min(255)
+                } else {
+                    event.cal_config.priority.saturating_sub(1)
+                };
+                event.cal_config.priority = new_val;
+                self.last_action = format!("priority: {}", new_val);
             }
             7 => {
-                let lower = value.to_lowercase();
-                event.cal_config.save_trigger = match lower.as_str() {
-                    "pdtc" | "onpdtc" => SaveTrigger::OnPdtc,
-                    "cdtc" | "oncdtc" => SaveTrigger::OnCdtc,
-                    "tf" | "ontf" => SaveTrigger::OnTf,
-                    "tftoc" | "ontftoc" => SaveTrigger::OnTftoc,
-                    _ => {
-                        self.last_action = "Invalid save_trigger".to_string();
-                        return;
-                    }
+                event.cal_config.save_trigger = match event.cal_config.save_trigger {
+                    SaveTrigger::OnPdtc => SaveTrigger::OnCdtc,
+                    SaveTrigger::OnCdtc => SaveTrigger::OnTf,
+                    SaveTrigger::OnTf => SaveTrigger::OnTftoc,
+                    SaveTrigger::OnTftoc => SaveTrigger::OnPdtc,
                 };
-                self.last_action = format!("Set save_trigger to {}", value);
+                self.last_action = format!("save_trigger: {:?}", event.cal_config.save_trigger);
             }
             8 => {
-                let lower = value.to_lowercase();
-                event.cal_config.record_update = lower == "true" || lower == "1" || lower == "yes";
-                self.last_action =
-                    format!("Set record_update to {}", event.cal_config.record_update);
+                event.cal_config.record_update = !event.cal_config.record_update;
+                self.last_action = format!("record_update: {}", event.cal_config.record_update);
             }
             _ => {}
         }
-        self.input_buffer.clear();
-        self.editing_calib = false;
+    }
+
+    fn get_calib_field_value(&self) -> String {
+        let event = &self.manager.events[self.viewed_event];
+        match self.editing_field {
+            0 => format!("{}", event.cal_config.step_up),
+            1 => format!("{}", event.cal_config.step_down),
+            2 => format!("{:?}", event.cal_config.debounce_type),
+            3 => format!("{:?}", event.cal_config.debounce_behavior),
+            4 => format!("{}", event.cal_config.confirmation_threshold),
+            5 => format!("{}", event.cal_config.aging_threshold),
+            6 => format!("{}", event.cal_config.priority),
+            7 => format!("{:?}", event.cal_config.save_trigger),
+            8 => format!("{}", event.cal_config.record_update),
+            _ => String::new(),
+        }
     }
 }
 
@@ -595,143 +958,201 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
     let state = unsafe { &*(&raw const SYSTEM_STATE) };
     let old_state = unsafe { &*(&raw const SYSTEM_STATE_OLD) };
 
-    let lines = vec![
-        Line::from(vec![
-            Span::raw("  Battery Voltage: "),
-            Span::raw(format!("{:>5.1}V", state.battery_voltage_x10 as f32 / 10.0)),
-            Span::raw("  ").fg(theme::MUTED),
-            Span::raw(get_trend_indicator(
-                state.battery_voltage_x10,
-                old_state.battery_voltage_x10,
-            ))
-            .fg(
-                if state.battery_voltage_x10 > old_state.battery_voltage_x10 {
-                    theme::GREEN
-                } else if state.battery_voltage_x10 < old_state.battery_voltage_x10 {
-                    theme::RED
-                } else {
-                    theme::MUTED
-                },
-            ),
-        ]),
-        Line::from(vec![
-            Span::raw("  Engine RPM:     "),
-            Span::raw(format!("{:>6}", state.engine_rpm)),
-            Span::raw(" rpm ").fg(theme::MUTED),
-            Span::raw(get_trend_indicator(state.engine_rpm, old_state.engine_rpm)).fg(
-                if state.engine_rpm > old_state.engine_rpm {
-                    theme::GREEN
-                } else if state.engine_rpm < old_state.engine_rpm {
-                    theme::RED
-                } else {
-                    theme::MUTED
-                },
-            ),
-        ]),
-        Line::from(vec![
-            Span::raw("  Vehicle Speed:  "),
-            Span::raw(format!("{:>6}", state.vehicle_speed)),
-            Span::raw(" km/h ").fg(theme::MUTED),
-            Span::raw(get_trend_indicator(
-                state.vehicle_speed,
-                old_state.vehicle_speed,
-            ))
-            .fg(if state.vehicle_speed > old_state.vehicle_speed {
-                theme::YELLOW
-            } else if state.vehicle_speed < old_state.vehicle_speed {
-                theme::GREEN
-            } else {
-                theme::MUTED
-            }),
-        ]),
-        Line::from(vec![
-            Span::raw("  Coolant Temp:  "),
-            Span::raw(format!("{:>6}°C", state.coolant_temp)),
-            Span::raw("   ").fg(theme::MUTED),
-            Span::raw(get_trend_indicator(
-                state.coolant_temp,
-                old_state.coolant_temp,
-            ))
-            .fg(if state.coolant_temp > old_state.coolant_temp {
+    let make_trend_cell = |current: u32, old: u32, color: ratatui::style::Color| -> Line<'static> {
+        let trend = get_trend_indicator(current, old);
+        let trend_color = if current > old {
+            color
+        } else if current < old {
+            theme::RED
+        } else {
+            theme::MUTED
+        };
+        Line::from(Span::raw(format!("{:>2}", trend)).fg(trend_color))
+    };
+
+    let make_value_trend_cell =
+        |current: u32, old: u32, up_color: ratatui::style::Color| -> Line<'static> {
+            let trend = get_trend_indicator(current, old);
+            let trend_color = if current > old {
+                up_color
+            } else if current < old {
                 theme::RED
-            } else if state.coolant_temp < old_state.coolant_temp {
-                theme::BLUE
             } else {
                 theme::MUTED
+            };
+            Line::from(Span::raw(format!("{:>2}", trend)).fg(trend_color))
+        };
+
+    let rows: Vec<Row> = vec![
+        Row::new(vec![
+            Line::from(Span::raw("Battery Voltage")),
+            Line::from(Span::raw(format!(
+                "{:>7.1}V",
+                state.battery_voltage_x10 as f32 / 10.0
+            ))),
+            make_trend_cell(
+                state.battery_voltage_x10 as u32,
+                old_state.battery_voltage_x10 as u32,
+                theme::GREEN,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Engine RPM")),
+            Line::from(Span::raw(format!("{:>6} rpm", state.engine_rpm))),
+            make_trend_cell(
+                state.engine_rpm as u32,
+                old_state.engine_rpm as u32,
+                theme::GREEN,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Vehicle Speed")),
+            Line::from(Span::raw(format!("{:>5} km/h", state.vehicle_speed))),
+            make_value_trend_cell(
+                state.vehicle_speed as u32,
+                old_state.vehicle_speed as u32,
+                theme::YELLOW,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Coolant Temp")),
+            Line::from(Span::raw(format!("{:>4}°C", state.coolant_temp))),
+            make_trend_cell(
+                state.coolant_temp as u32,
+                old_state.coolant_temp as u32,
+                theme::RED,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Intake Air")),
+            Line::from(Span::raw(format!("{:>4}°C", state.intake_air_temp))),
+            make_trend_cell(
+                state.intake_air_temp as u32,
+                old_state.intake_air_temp as u32,
+                theme::MUTED,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Throttle")),
+            Line::from(Span::raw(format!("{:>4}%", state.throttle_position))),
+            make_value_trend_cell(
+                state.throttle_position as u32,
+                old_state.throttle_position as u32,
+                theme::YELLOW,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Fuel Level")),
+            Line::from(Span::raw(format!("{:>5}%", state.fuel_level))),
+            make_trend_cell(
+                state.fuel_level as u32,
+                old_state.fuel_level as u32,
+                theme::GREEN,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Oil Pressure")),
+            Line::from(Span::raw(format!("{:>5}kPa", state.oil_pressure))),
+            make_trend_cell(
+                state.oil_pressure as u32,
+                old_state.oil_pressure as u32,
+                theme::GREEN,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Trans Temp")),
+            Line::from(Span::raw(format!("{:>4}°C", state.transmission_temp))),
+            make_trend_cell(
+                state.transmission_temp as u32,
+                old_state.transmission_temp as u32,
+                theme::RED,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Exhaust Temp")),
+            Line::from(Span::raw(format!("{:>4}°C", state.exhaust_temp))),
+            make_trend_cell(
+                state.exhaust_temp as u32,
+                old_state.exhaust_temp as u32,
+                theme::RED,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("MAF Rate")),
+            Line::from(Span::raw(format!("{:>5}g/s", state.maf_rate))),
+            make_trend_cell(
+                state.maf_rate as u32,
+                old_state.maf_rate as u32,
+                theme::GREEN,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Dyno Load")),
+            Line::from(Span::raw(format!("{:>4}%", state.dyno_load))),
+            make_value_trend_cell(
+                state.dyno_load as u32,
+                old_state.dyno_load as u32,
+                theme::YELLOW,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("Fuel Press")),
+            Line::from(Span::raw(format!("{:>6}kPa", state.fuel_pressure))),
+            make_trend_cell(
+                state.fuel_pressure as u32,
+                old_state.fuel_pressure as u32,
+                theme::GREEN,
+            ),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("OBD Cycle")),
+            Line::from(Span::raw(format!("{:>8}", state.obd_cycle_counter))),
+            Line::from(Span::raw("  ")),
+        ]),
+        Row::new(vec![
+            Line::from(Span::raw("System Mode")),
+            Line::from(match state.system_mode {
+                0x01 => Span::raw("   Normal").fg(theme::GREEN),
+                0x02 => Span::raw("Fault Active").fg(theme::RED),
+                0x03 => Span::raw("Fault Healed").fg(theme::YELLOW),
+                _ => Span::raw("   Unknown").fg(theme::MUTED),
             }),
-        ]),
-        Line::from(vec![
-            Span::raw("  Intake Air:    "),
-            Span::raw(format!("{:>6}°C", state.intake_air_temp)),
-            Span::raw("   ").fg(theme::MUTED),
-            Span::raw(get_trend_indicator(
-                state.intake_air_temp,
-                old_state.intake_air_temp,
-            ))
-            .fg(theme::MUTED),
-        ]),
-        Line::from(vec![
-            Span::raw("  Throttle:     "),
-            Span::raw(format!("{:>6}%", state.throttle_position)),
-            Span::raw("  ").fg(theme::MUTED),
-            Span::raw(get_trend_indicator(
-                state.throttle_position,
-                old_state.throttle_position,
-            ))
-            .fg(if state.throttle_position > old_state.throttle_position {
-                theme::YELLOW
-            } else if state.throttle_position < old_state.throttle_position {
-                theme::GREEN
-            } else {
-                theme::MUTED
-            }),
-        ]),
-        Line::from(vec![
-            Span::raw("  OBD Cycle:    "),
-            Span::raw(format!("{}", state.obd_cycle_counter)),
-        ]),
-        Line::from(vec![
-            Span::raw("  System Mode:  "),
-            Span::raw(match state.system_mode {
-                0x01 => "Normal       ",
-                0x02 => "Fault Active ",
-                0x03 => "Fault Healed ",
-                _ => "Unknown      ",
-            })
-            .fg(match state.system_mode {
-                0x01 => theme::GREEN,
-                0x02 => theme::RED,
-                0x03 => theme::YELLOW,
-                _ => theme::MUTED,
-            }),
+            Line::from(Span::raw("  ")),
         ]),
     ];
 
-    f.render_widget(
-        Paragraph::new(lines).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme::MUTED))
-                .title_style(Style::default().fg(theme::CYAN))
-                .title(" System State (Live) "),
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(20),
+            Constraint::Length(10),
+            Constraint::Length(3),
+        ],
+    )
+    .header(
+        Row::new(vec![
+            Line::from(Span::raw("Parameter")),
+            Line::from(Span::raw("Value")),
+            Line::from(Span::raw("")),
+        ])
+        .style(
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(theme::PURPLE),
         ),
-        area,
+    )
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::CYAN))
+            .title(" System State (Live) "),
     );
+
+    f.render_widget(table, area);
 }
 
 fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
-    let event_names = [
-        "OverTemp",
-        "UnderVolt",
-        "OverSpeed",
-        "LowFuel",
-        "BrakeFail",
-        "SensorErr",
-        "CommFault",
-        "OilPress",
-        "Coolant",
-    ];
-
     let items: Vec<ListItem> = app
         .manager
         .events
@@ -739,7 +1160,7 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
         .enumerate()
         .map(|(i, event)| {
             let status = event.status();
-            let name = event_names.get(i).unwrap_or(&"Unknown");
+            let name = EVENT_NAMES.get(i).unwrap_or(&"Unknown");
 
             let mut flags = String::new();
             if status.tf() {
@@ -921,9 +1342,9 @@ fn render_event_details(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
         lines.push(Line::from(vec![
             Span::raw("Editing: ").fg(theme::CYAN),
             Span::raw(App::get_calib_field_name(app.editing_field)).bold(),
-            Span::raw(" | Input: "),
-            Span::raw(&app.input_buffer).fg(theme::YELLOW),
-            Span::raw(" | Press Enter to apply, Esc to cancel"),
+            Span::raw(" | Value: "),
+            Span::raw(app.get_calib_field_value()).fg(theme::YELLOW),
+            Span::raw(" | [↑/↓] Change  [Tab] Next  [Esc] Cancel"),
         ]));
     }
 
@@ -989,29 +1410,119 @@ fn render_freeze_frames_panel(f: &mut ratatui::Frame<'_>, app: &App, area: Rect)
                 Style::default()
             };
 
-            Row::new(vec![
-                format!("{}", ff.event_id),
+            let snapshot_values: Vec<String> = if app.show_raw_snapshot {
+                vec![
+                    format!("{:02X}", ff.snapshot_data[0]),
+                    format!(
+                        "{:04X}",
+                        u16::from_le_bytes([ff.snapshot_data[1], ff.snapshot_data[2]])
+                    ),
+                    format!(
+                        "{:04X}",
+                        u16::from_le_bytes([ff.snapshot_data[3], ff.snapshot_data[4]])
+                    ),
+                    format!("{:02X}", ff.snapshot_data[5]),
+                    format!("{:02X}", ff.snapshot_data[6]),
+                    format!("{:02X}", ff.snapshot_data[7]),
+                    format!("{:02X}", ff.snapshot_data[10]),
+                    format!(
+                        "{:04X}",
+                        u16::from_le_bytes([ff.snapshot_data[11], ff.snapshot_data[12]])
+                    ),
+                    format!("{:02X}", ff.snapshot_data[13]),
+                    format!("{:02X}", ff.snapshot_data[14]),
+                    format!(
+                        "{:04X}",
+                        u16::from_le_bytes([ff.snapshot_data[15], ff.snapshot_data[16]])
+                    ),
+                    format!("{:02X}", ff.snapshot_data[17]),
+                    format!("{:02X}", ff.snapshot_data[18]),
+                ]
+            } else {
+                vec![
+                    format!("{:.1}", ff.snapshot_data[0] as f32 / 10.0),
+                    format!(
+                        "{}",
+                        u16::from_le_bytes([ff.snapshot_data[1], ff.snapshot_data[2]])
+                    ),
+                    format!(
+                        "{}",
+                        u16::from_le_bytes([ff.snapshot_data[3], ff.snapshot_data[4]])
+                    ),
+                    format!("{}", ff.snapshot_data[5]),
+                    format!("{}", ff.snapshot_data[6]),
+                    format!("{}", ff.snapshot_data[7]),
+                    format!("{}", ff.snapshot_data[10]),
+                    format!(
+                        "{}",
+                        u16::from_le_bytes([ff.snapshot_data[11], ff.snapshot_data[12]])
+                    ),
+                    format!("{}", ff.snapshot_data[13]),
+                    format!("{}", ff.snapshot_data[14]),
+                    format!(
+                        "{}",
+                        u16::from_le_bytes([ff.snapshot_data[15], ff.snapshot_data[16]])
+                    ),
+                    format!("{}", ff.snapshot_data[17]),
+                    format!("{}", ff.snapshot_data[18]),
+                ]
+            };
+
+            let mut row_data = vec![
+                format!("{}[{}]", EVENT_NAMES[ff.event_id as usize], ff.event_id),
                 format!("{}", ff.priority),
                 format!("{}", ff.first_occurrence_time),
                 format!("{}", ff.last_occurrence_time),
-                format_data_hex(&ff.snapshot_data[..16.min(ff.snapshot_data.len())]),
-            ])
-            .style(style)
+            ];
+            row_data.extend(snapshot_values);
+
+            Row::new(row_data).style(style)
         })
         .collect();
 
     let table = Table::new(
         rows,
         [
+            Constraint::Length(14),
+            Constraint::Length(5),
+            Constraint::Length(6),
+            Constraint::Length(6),
             Constraint::Length(8),
-            Constraint::Length(10),
-            Constraint::Length(12),
-            Constraint::Length(12),
-            Constraint::Min(20),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(8),
         ],
     )
     .header(
-        Row::new(vec!["Event", "Priority", "First", "Last", "Data (hex)"]).style(
+        Row::new(vec![
+            "Event",
+            "Pri",
+            "first",
+            "last",
+            "Bat(V)",
+            "RPM",
+            "Spd(km/h)",
+            "Cool(C)",
+            "Intk(C)",
+            "Thr(%)",
+            "Fuel(%)",
+            "Oil(kPa)",
+            "Trans(C)",
+            "Exh(C)",
+            "MAF(g/s)",
+            "Load(%)",
+            "FP(kPa)",
+        ])
+        .style(
             Style::default()
                 .add_modifier(Modifier::BOLD)
                 .fg(theme::PURPLE),
@@ -1028,40 +1539,48 @@ fn render_freeze_frames_panel(f: &mut ratatui::Frame<'_>, app: &App, area: Rect)
     let inner_area = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(4));
     f.render_widget(table, inner_area);
 
-    if let Some(selected) = app.selected_ff {
-        if let Some(ff) = ff_list.get_by_event_id(selected as EventId) {
-            let hex_lines = format_hex_dump(&ff.snapshot_data, 64);
-            let hex_lines_len = hex_lines.len();
-            let paragraph = Paragraph::new(hex_lines)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(theme::MUTED))
-                        .title_style(Style::default().fg(theme::CYAN))
-                        .title(format!(" Snapshot Data - Event {} ", ff.event_id)),
-                )
-                .scroll((app.ff_scroll as u16, 0));
+    let show_snapshot_detail = if ff_list.len() == 1 {
+        ff_list.iter().next()
+    } else {
+        app.selected_ff
+            .and_then(|selected| ff_list.get_by_event_id(selected as EventId))
+    };
 
-            let detail_area = Rect::new(
-                area.x,
-                area.y + area.height.saturating_sub(5),
-                area.width,
-                4,
-            );
-            f.render_widget(paragraph, detail_area);
+    if let Some(ff) = show_snapshot_detail {
+        let hex_lines = format_hex_dump(&ff.snapshot_data, 64);
+        let hex_lines_len = hex_lines.len();
+        let paragraph = Paragraph::new(hex_lines)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(theme::MUTED))
+                    .title_style(Style::default().fg(theme::CYAN))
+                    .title(format!(
+                        " Snapshot Data - {}[{}] ",
+                        EVENT_NAMES[ff.event_id as usize], ff.event_id
+                    )),
+            )
+            .scroll((app.ff_scroll as u16, 0));
 
-            let mut scroll_state = ScrollbarState::new(hex_lines_len).position(app.ff_scroll);
-            f.render_stateful_widget(
-                Scrollbar::new(ScrollbarOrientation::VerticalRight).thumb_symbol("█"),
-                detail_area,
-                &mut scroll_state,
-            );
-        }
+        let detail_area = Rect::new(
+            area.x,
+            area.y + area.height.saturating_sub(5),
+            area.width,
+            4,
+        );
+        f.render_widget(paragraph, detail_area);
+
+        let mut scroll_state = ScrollbarState::new(hex_lines_len).position(app.ff_scroll);
+        f.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight).thumb_symbol("█"),
+            detail_area,
+            &mut scroll_state,
+        );
     }
 
     let hint = Line::from(vec![
         Span::raw(" [↑/↓] Select FF  "),
-        Span::raw("[D] Delete FF  "),
+        Span::raw("[R] Raw/Phys  "),
         Span::raw("[F] Close panel"),
     ])
     .style(Style::default().fg(theme::MUTED));
@@ -1087,16 +1606,32 @@ fn render_footer(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
         theme::RED
     };
 
-    let line = Line::from(vec![
-        Span::raw("[").fg(theme::MUTED),
-        Span::raw(status).fg(status_color).bold(),
-        Span::raw("] ").fg(theme::MUTED),
-        Span::raw(format!("Timestamp: {:04}  ", *app.manager.timestamp)),
-        Span::raw("| Last: ").fg(theme::MUTED),
-        Span::raw(&app.last_action),
-        Span::raw(" | ").fg(theme::MUTED),
-        Span::raw("[Space] Select  [1] PreFail  [2] Fail  [3] PrePass  [4] Pass  [I] Init  [S] Stop  [N] Cycle  [C] Clear  [F] FF  [?] Help  [Q] Quit"),
-    ]);
+    let line = if app.editing_calib {
+        Line::from(vec![
+            Span::raw("[").fg(theme::MUTED),
+            Span::raw(status).fg(status_color).bold(),
+            Span::raw("] ").fg(theme::MUTED),
+            Span::raw(format!("Timestamp: {:04}  ", *app.manager.timestamp)),
+            Span::raw("| ").fg(theme::MUTED),
+            Span::raw("Editing: ").fg(theme::CYAN),
+            Span::raw(format!("Event {} - ", app.viewed_event)),
+            Span::raw(App::get_calib_field_name(app.editing_field)).bold(),
+            Span::raw(" | Value: ").fg(theme::MUTED),
+            Span::raw(app.get_calib_field_value()).fg(theme::YELLOW),
+            Span::raw(" | Tab=Next  Esc=Cancel").fg(theme::MUTED),
+        ])
+    } else {
+        Line::from(vec![
+            Span::raw("[").fg(theme::MUTED),
+            Span::raw(status).fg(status_color).bold(),
+            Span::raw("] ").fg(theme::MUTED),
+            Span::raw(format!("Timestamp: {:04}  ", *app.manager.timestamp)),
+            Span::raw("| Last: ").fg(theme::MUTED),
+            Span::raw(&app.last_action),
+            Span::raw(" | ").fg(theme::MUTED),
+            Span::raw("[Space] Select  [1] PreFail  [2] Fail  [3] PrePass  [4] Pass  [E] Edit  [I] Init  [S] Stop  [N] Cycle  [C] Clear  [F] FF  [?] Help  [Q] Quit"),
+        ])
+    };
 
     f.render_widget(
         Paragraph::new(line).style(Style::default().bg(theme::BG_LIGHT)),
@@ -1110,13 +1645,6 @@ fn flag_span(value: bool) -> Span<'static> {
     } else {
         Span::raw("[OFF]").fg(theme::MUTED)
     }
-}
-
-fn format_data_hex(data: &[u8]) -> String {
-    data.iter()
-        .map(|b| format!("{:02X}", b))
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 fn format_hex_dump<'a>(data: &'a [u8], max_bytes: usize) -> Vec<Line<'a>> {
@@ -1239,8 +1767,8 @@ fn render_help_overlay(f: &mut ratatui::Frame<'_>, app: &App) {
             Span::raw("Toggle freeze frames panel"),
         ]),
         Line::from(vec![
-            Span::raw("  [D]            ").fg(theme::YELLOW),
-            Span::raw("Delete selected freeze frame"),
+            Span::raw("  [R]            ").fg(theme::YELLOW),
+            Span::raw("Toggle raw/physical snapshot view"),
         ]),
         Line::from(""),
         Line::from(vec![Span::raw("Navigation")
@@ -1265,12 +1793,12 @@ fn render_help_overlay(f: &mut ratatui::Frame<'_>, app: &App) {
             Span::raw("Edit CalibConfig for event"),
         ]),
         Line::from(vec![
-            Span::raw("  [Tab]          ").fg(theme::YELLOW),
-            Span::raw("Next field (in edit mode)"),
+            Span::raw("  [↑/↓]          ").fg(theme::YELLOW),
+            Span::raw("Change value (in edit mode)"),
         ]),
         Line::from(vec![
-            Span::raw("  [Enter]        ").fg(theme::YELLOW),
-            Span::raw("Apply value"),
+            Span::raw("  [Tab]          ").fg(theme::YELLOW),
+            Span::raw("Next field (in edit mode)"),
         ]),
         Line::from(vec![
             Span::raw("  [Esc]          ").fg(theme::YELLOW),
@@ -1309,6 +1837,7 @@ fn render_help_overlay(f: &mut ratatui::Frame<'_>, app: &App) {
 
 fn main() -> Result<(), io::Error> {
     let mut app = App::new();
+    app.manager.clear();
     let mut last_tick = Instant::now();
 
     let stdout = io::stdout();
@@ -1435,26 +1964,26 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
             };
         }
 
+        KeyCode::Char('r') | KeyCode::Char('R') => {
+            if app.show_freeze_frames {
+                app.show_raw_snapshot = !app.show_raw_snapshot;
+                app.last_action = if app.show_raw_snapshot {
+                    "Showing raw snapshot data".to_string()
+                } else {
+                    "Showing physical snapshot data".to_string()
+                };
+            }
+        }
+
         KeyCode::Char('e') | KeyCode::Char('E') => {
             if app.manager.events.len() > 0 {
                 app.editing_calib = true;
                 app.editing_field = 0;
-                app.input_buffer.clear();
                 app.last_action = format!(
                     "Editing {} for Event {}",
                     App::get_calib_field_name(0),
                     app.viewed_event
                 );
-            }
-        }
-
-        KeyCode::Char('d') | KeyCode::Char('D') => {
-            if app.show_freeze_frames {
-                if let Some(ff_id) = app.selected_ff {
-                    app.manager.free_from_freeze_frames(ff_id as EventId);
-                    app.last_action = format!("Deleted freeze frame for event {}", ff_id);
-                    app.selected_ff = None;
-                }
             }
         }
 
@@ -1515,20 +2044,13 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
 
 fn handle_calib_edit_input(app: &mut App, key: KeyEvent) {
     match key.code {
-        KeyCode::Enter => {
-            let value = app.input_buffer.clone();
-            app.apply_calib_edit(&value);
-        }
-
         KeyCode::Esc => {
             app.editing_calib = false;
-            app.input_buffer.clear();
             app.last_action = "Calib edit cancelled".to_string();
         }
 
         KeyCode::Tab => {
             app.editing_field = (app.editing_field + 1) % 9;
-            app.input_buffer.clear();
             app.last_action = format!(
                 "Editing {} for Event {}",
                 App::get_calib_field_name(app.editing_field),
@@ -1536,12 +2058,12 @@ fn handle_calib_edit_input(app: &mut App, key: KeyEvent) {
             );
         }
 
-        KeyCode::Backspace => {
-            app.input_buffer.pop();
+        KeyCode::Up => {
+            app.adjust_calib_value(true);
         }
 
-        KeyCode::Char(c) => {
-            app.input_buffer.push(c);
+        KeyCode::Down => {
+            app.adjust_calib_value(false);
         }
 
         _ => {}
