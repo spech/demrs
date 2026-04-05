@@ -1305,9 +1305,26 @@ fn render_event_details_wrapper(f: &mut ratatui::Frame<'_>, app: &App, area: Rec
 
     render_uds_status_panel(f, status, body_layout[0]);
 
-    render_nvm_debounce_panel(f, event, body_layout[2]);
+    let nvm_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+        .split(body_layout[2]);
 
-    render_calib_panel(f, cal, body_layout[4]);
+    render_nvm_counters_panel(f, event, nvm_layout[0]);
+    render_debounce_panel(f, event, nvm_layout[1]);
+
+    let calib_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(45),
+            Constraint::Percentage(30),
+            Constraint::Percentage(25),
+        ])
+        .split(body_layout[4]);
+
+    render_debounce_config_panel(f, cal, calib_layout[0]);
+    render_thresholds_panel(f, cal, calib_layout[1]);
+    render_persistence_panel(f, cal, calib_layout[2]);
 
     if app.editing_calib {
         let edit_line = Line::from(vec![
@@ -1328,12 +1345,6 @@ fn render_event_details_wrapper(f: &mut ratatui::Frame<'_>, app: &App, area: Rec
 
 fn render_uds_status_panel(f: &mut ratatui::Frame<'_>, status: dem::UdsStatusByte, area: Rect) {
     let rows = vec![
-        Row::new(vec![
-            Cell::from(Span::raw("UDS Status").bold().fg(theme::PURPLE)),
-            Cell::from(Span::raw("").fg(theme::PURPLE)),
-            Cell::from(Span::raw("").fg(theme::PURPLE)),
-        ])
-        .style(Style::default().bg(theme::BG_LIGHT)),
         Row::new(vec![
             Cell::from(Span::raw("TF")),
             Cell::from(Span::raw("Test Failed")),
@@ -1378,55 +1389,67 @@ fn render_uds_status_panel(f: &mut ratatui::Frame<'_>, status: dem::UdsStatusByt
             Constraint::Length(14),
             Constraint::Length(8),
         ],
+    )
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::PURPLE))
+            .title(" UDS Status "),
     );
 
     f.render_widget(table, area);
 }
 
-fn render_nvm_debounce_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Rect) {
+fn render_nvm_counters_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Rect) {
     let rows = vec![
         Row::new(vec![
-            Cell::from(Span::raw("NVM Counters").bold().fg(theme::PURPLE)),
-            Cell::from(Span::raw("").fg(theme::PURPLE)),
-        ])
-        .style(Style::default().bg(theme::BG_LIGHT)),
-        Row::new(vec![
-            Cell::from(Span::raw("Occurrence")),
+            Cell::from(Span::raw("Occurrence").bold().fg(theme::MUTED)),
             Cell::from(Span::raw(format!("{:>8}", event.nv_config.occurence_cntr))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("Confirmation")),
+            Cell::from(Span::raw("Confirmation").bold().fg(theme::MUTED)),
             Cell::from(Span::raw(format!(
                 "{:>8}",
                 event.nv_config.confirmation_cycles
             ))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("Aging Cycles")),
+            Cell::from(Span::raw("Aging Cycles").bold().fg(theme::MUTED)),
             Cell::from(Span::raw(format!("{:>8}", event.nv_config.aging_cycles))),
-        ]),
-        Row::new(vec![
-            Cell::from(Span::raw("· · · · · · · · ·").style(Style::default().fg(theme::MUTED))),
-            Cell::from(Span::raw("· · · ·").style(Style::default().fg(theme::MUTED))),
-        ]),
-        Row::new(vec![
-            Cell::from(Span::raw("Debounce").bold()),
-            Cell::from(Span::raw(format!("{:>8}", event.debounce_counter())).fg(theme::CYAN)),
         ]),
     ];
 
-    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(10)]);
+    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(10)]).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::PURPLE))
+            .title(" NVM Counters "),
+    );
 
     f.render_widget(table, area);
 }
 
-fn render_calib_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
+fn render_debounce_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Rect) {
+    let rows = vec![Row::new(vec![
+        Cell::from(Span::raw("Debounce").bold().fg(theme::MUTED)),
+        Cell::from(Span::raw(format!("{:>8}", event.debounce_counter())).fg(theme::YELLOW)),
+    ])];
+
+    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(10)]).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::PURPLE))
+            .title(" Debounce "),
+    );
+
+    f.render_widget(table, area);
+}
+
+fn render_debounce_config_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
     let rows = vec![
-        Row::new(vec![
-            Cell::from(Span::raw("Calibration").bold().fg(theme::PURPLE)),
-            Cell::from(Span::raw("").fg(theme::PURPLE)),
-        ])
-        .style(Style::default().bg(theme::BG_LIGHT)),
         Row::new(vec![
             Cell::from(Span::raw("step_up")),
             Cell::from(Span::raw(format!("{:>14}", cal.step_up))),
@@ -1436,28 +1459,36 @@ fn render_calib_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: 
             Cell::from(Span::raw(format!("{:>14}", cal.step_down))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("debounce_type")),
+            Cell::from(Span::raw("deb_type")),
             Cell::from(Span::raw(format!(
                 "{:>14}",
                 format!("{:?}", cal.debounce_type)
             ))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("debounce_behavior")),
+            Cell::from(Span::raw("deb_behav")),
             Cell::from(Span::raw(format!(
                 "{:>14}",
                 format!("{:?}", cal.debounce_behavior)
             ))),
         ]),
+    ];
+
+    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(16)]).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::PURPLE))
+            .title(" Debounce Config "),
+    );
+
+    f.render_widget(table, area);
+}
+
+fn render_thresholds_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
+    let rows = vec![
         Row::new(vec![
-            Cell::from(
-                Span::raw("· · · · · · · · · · · · · · · ·")
-                    .style(Style::default().fg(theme::MUTED)),
-            ),
-            Cell::from(Span::raw("· · · ·").style(Style::default().fg(theme::MUTED))),
-        ]),
-        Row::new(vec![
-            Cell::from(Span::raw("confirmation")),
+            Cell::from(Span::raw("confirm")),
             Cell::from(Span::raw(format!("{:>14}", cal.confirmation_threshold))),
         ]),
         Row::new(vec![
@@ -1468,22 +1499,30 @@ fn render_calib_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: 
             Cell::from(Span::raw("priority")),
             Cell::from(Span::raw(format!("{:>14}", cal.priority))),
         ]),
+    ];
+
+    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(16)]).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::PURPLE))
+            .title(" Thresholds "),
+    );
+
+    f.render_widget(table, area);
+}
+
+fn render_persistence_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
+    let rows = vec![
         Row::new(vec![
-            Cell::from(
-                Span::raw("· · · · · · · · · · · · · · · ·")
-                    .style(Style::default().fg(theme::MUTED)),
-            ),
-            Cell::from(Span::raw("· · · ·").style(Style::default().fg(theme::MUTED))),
-        ]),
-        Row::new(vec![
-            Cell::from(Span::raw("save_trigger")),
+            Cell::from(Span::raw("save_trig")),
             Cell::from(Span::raw(format!(
                 "{:>14}",
                 format!("{:?}", cal.save_trigger)
             ))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("record_update")),
+            Cell::from(Span::raw("record")),
             Cell::from(Span::raw(format!(
                 "{:>14}",
                 if cal.record_update { "Yes" } else { "No" }
@@ -1491,7 +1530,13 @@ fn render_calib_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: 
         ]),
     ];
 
-    let table = Table::new(rows, [Constraint::Length(18), Constraint::Length(14)]);
+    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(16)]).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::PURPLE))
+            .title(" Persistence "),
+    );
 
     f.render_widget(table, area);
 }
@@ -1514,7 +1559,7 @@ fn render_freeze_frames_panel(f: &mut ratatui::Frame<'_>, app: &App, area: Rect)
                     Block::default()
                         .borders(Borders::ALL)
                         .border_style(Style::default().fg(theme::MUTED))
-                        .title_style(Style::default().fg(theme::CYAN))
+                        .title_style(Style::default().fg(theme::PURPLE))
                         .title(" Freeze Frames "),
                 ),
             area,
