@@ -1291,16 +1291,23 @@ fn render_event_details_wrapper(f: &mut ratatui::Frame<'_>, app: &App, area: Rec
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(24),
+            Constraint::Length(1),
             Constraint::Percentage(28),
+            Constraint::Length(1),
             Constraint::Percentage(48),
         ])
         .split(inner_layout[0]);
 
+    let line_style = Style::default().fg(theme::MUTED).bg(theme::BG_LIGHT);
+
+    f.render_widget(Paragraph::new("│").style(line_style), body_layout[1]);
+    f.render_widget(Paragraph::new("│").style(line_style), body_layout[3]);
+
     render_uds_status_panel(f, status, body_layout[0]);
 
-    render_nvm_debounce_panel(f, event, body_layout[1]);
+    render_nvm_debounce_panel(f, event, body_layout[2]);
 
-    render_calib_panel(f, cal, body_layout[2]);
+    render_calib_panel(f, cal, body_layout[4]);
 
     if app.editing_calib {
         let edit_line = Line::from(vec![
@@ -1399,8 +1406,8 @@ fn render_nvm_debounce_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Re
             Cell::from(Span::raw(format!("{:>8}", event.nv_config.aging_cycles))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("").style(Style::default().fg(theme::MUTED))),
-            Cell::from(Span::raw("").style(Style::default().fg(theme::MUTED))),
+            Cell::from(Span::raw("· · · · · · · · ·").style(Style::default().fg(theme::MUTED))),
+            Cell::from(Span::raw("· · · ·").style(Style::default().fg(theme::MUTED))),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("Debounce").bold()),
@@ -1443,6 +1450,13 @@ fn render_calib_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: 
             ))),
         ]),
         Row::new(vec![
+            Cell::from(
+                Span::raw("· · · · · · · · · · · · · · · ·")
+                    .style(Style::default().fg(theme::MUTED)),
+            ),
+            Cell::from(Span::raw("· · · ·").style(Style::default().fg(theme::MUTED))),
+        ]),
+        Row::new(vec![
             Cell::from(Span::raw("confirmation")),
             Cell::from(Span::raw(format!("{:>14}", cal.confirmation_threshold))),
         ]),
@@ -1453,6 +1467,13 @@ fn render_calib_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: 
         Row::new(vec![
             Cell::from(Span::raw("priority")),
             Cell::from(Span::raw(format!("{:>14}", cal.priority))),
+        ]),
+        Row::new(vec![
+            Cell::from(
+                Span::raw("· · · · · · · · · · · · · · · ·")
+                    .style(Style::default().fg(theme::MUTED)),
+            ),
+            Cell::from(Span::raw("· · · ·").style(Style::default().fg(theme::MUTED))),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("save_trigger")),
