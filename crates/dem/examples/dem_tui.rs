@@ -58,6 +58,7 @@ mod theme {
     pub const CYAN: Color = Color::Rgb(122, 162, 255);
     pub const BLUE: Color = Color::Rgb(86, 182, 194);
     pub const ORANGE: Color = Color::Rgb(255, 165, 0);
+    pub const MAGENTA: Color = Color::Rgb(187, 134, 247);
     pub const MUTED: Color = Color::Rgb(86, 95, 137);
     pub const SELECTION: Color = Color::Rgb(36, 40, 59);
 }
@@ -1196,7 +1197,7 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
 
             let row_style = if app.trigger_event == Some(i) {
                 Style::default()
-                    .fg(theme::ORANGE)
+                    .fg(theme::BLUE)
                     .add_modifier(Modifier::BOLD)
             } else if i == app.viewed_event {
                 Style::default()
@@ -1256,7 +1257,7 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
             .title_style(Style::default().fg(theme::CYAN))
             .title(" Events "),
     )
-    .highlight_style(Style::default().bg(theme::SELECTION).fg(theme::ORANGE));
+    .highlight_style(Style::default().bg(theme::SELECTION).fg(theme::BLUE));
 
     f.render_widget(table, area);
 }
@@ -1404,23 +1405,23 @@ fn render_uds_status_panel(f: &mut ratatui::Frame<'_>, status: dem::UdsStatusByt
 fn render_nvm_counters_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Rect) {
     let rows = vec![
         Row::new(vec![
-            Cell::from(Span::raw("Occurrence").bold().fg(theme::MUTED)),
+            Cell::from(Span::raw("occurrence_counter").bold().fg(theme::MUTED)),
             Cell::from(Span::raw(format!("{:>8}", event.nv_config.occurence_cntr))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("Confirmation").bold().fg(theme::MUTED)),
+            Cell::from(Span::raw("confirmation_cycles").bold().fg(theme::MUTED)),
             Cell::from(Span::raw(format!(
                 "{:>8}",
                 event.nv_config.confirmation_cycles
             ))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("Aging Cycles").bold().fg(theme::MUTED)),
+            Cell::from(Span::raw("aging_cycles").bold().fg(theme::MUTED)),
             Cell::from(Span::raw(format!("{:>8}", event.nv_config.aging_cycles))),
         ]),
     ];
 
-    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(10)]).block(
+    let table = Table::new(rows, [Constraint::Length(20), Constraint::Length(10)]).block(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme::MUTED))
@@ -1452,29 +1453,29 @@ fn render_debounce_config_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConf
     let rows = vec![
         Row::new(vec![
             Cell::from(Span::raw("step_up")),
-            Cell::from(Span::raw(format!("{:>14}", cal.step_up))),
+            Cell::from(Span::raw(format!("{:>16}", cal.step_up))),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("step_down")),
-            Cell::from(Span::raw(format!("{:>14}", cal.step_down))),
+            Cell::from(Span::raw(format!("{:>16}", cal.step_down))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("deb_type")),
+            Cell::from(Span::raw("debounce_type")),
             Cell::from(Span::raw(format!(
-                "{:>14}",
+                "{:>16}",
                 format!("{:?}", cal.debounce_type)
             ))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("deb_behav")),
+            Cell::from(Span::raw("debounce_behavior")),
             Cell::from(Span::raw(format!(
-                "{:>14}",
+                "{:>16}",
                 format!("{:?}", cal.debounce_behavior)
             ))),
         ]),
     ];
 
-    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(16)]).block(
+    let table = Table::new(rows, [Constraint::Length(18), Constraint::Length(18)]).block(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme::MUTED))
@@ -1488,20 +1489,20 @@ fn render_debounce_config_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConf
 fn render_thresholds_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
     let rows = vec![
         Row::new(vec![
-            Cell::from(Span::raw("confirm")),
-            Cell::from(Span::raw(format!("{:>14}", cal.confirmation_threshold))),
+            Cell::from(Span::raw("confirmation_threshold")),
+            Cell::from(Span::raw(format!("{:>16}", cal.confirmation_threshold))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("aging")),
-            Cell::from(Span::raw(format!("{:>14}", cal.aging_threshold))),
+            Cell::from(Span::raw("aging_threshold")),
+            Cell::from(Span::raw(format!("{:>16}", cal.aging_threshold))),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("priority")),
-            Cell::from(Span::raw(format!("{:>14}", cal.priority))),
+            Cell::from(Span::raw(format!("{:>16}", cal.priority))),
         ]),
     ];
 
-    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(16)]).block(
+    let table = Table::new(rows, [Constraint::Length(22), Constraint::Length(18)]).block(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme::MUTED))
@@ -1515,22 +1516,22 @@ fn render_thresholds_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, a
 fn render_persistence_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
     let rows = vec![
         Row::new(vec![
-            Cell::from(Span::raw("save_trig")),
+            Cell::from(Span::raw("save_trigger")),
             Cell::from(Span::raw(format!(
-                "{:>14}",
+                "{:>16}",
                 format!("{:?}", cal.save_trigger)
             ))),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("record")),
+            Cell::from(Span::raw("record_update")),
             Cell::from(Span::raw(format!(
-                "{:>14}",
+                "{:>16}",
                 if cal.record_update { "Yes" } else { "No" }
             ))),
         ]),
     ];
 
-    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(16)]).block(
+    let table = Table::new(rows, [Constraint::Length(18), Constraint::Length(18)]).block(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(theme::MUTED))
