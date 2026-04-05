@@ -42,6 +42,14 @@ readings to confirm a fault:
 - **PDTC (Pending DTC)** - Temporary fault indicator
 - **CDTC (Confirmed DTC)** - Fully confirmed fault requiring service
 
+### Freeze Frames
+
+Freeze frames capture a snapshot of system state when a diagnostic event occurs. They provide context for debugging by storing:
+- Sensor values (voltage, RPM, speed, temperatures)
+- System conditions at the time of fault detection
+
+Freeze frames are stored persistently and survive power cycles. The DEM supports up to 24 freeze frames, prioritized by event priority.
+
 ### Status Byte Flags
 
 The UDS status byte tracks DTC state across 7 bits:
@@ -109,46 +117,10 @@ cargo run --example dem_tui -p dem
 ```
 
 **Features:**
-- View 25 events with real-time UDS status flags (TF, TFTOC, PDTC, CDTC)
-- See debounce counter values and NVM statistics (occurrence, aging, confirmation cycles)
-- Edit CalibConfig parameters at runtime using Up/Down arrows
-- View stored freeze frames with physical snapshot data
-- Snapshot detail panel shows raw hex data
-- Manual operating cycle simulation (stop/init cycles)
-- Trigger events via keyboard shortcuts
-- Press `?` to show the keyboard shortcuts legend
-
-**Keyboard Controls:**
-
-| Key | Action |
-|-----|--------|
-| `Space` | Select event for triggering (highlighted in teal) |
-| `1` | Trigger PreFailed on selected event |
-| `2` | Trigger Failed on selected event |
-| `3` | Trigger PrePassed on selected event |
-| `4` | Trigger Passed on selected event |
-| `↑/↓` | Navigate between events or freeze frames |
-| `PgUp/PgDn` | Scroll the details panel |
-| `I` | Initialize operating cycle |
-| `S` | Stop operating cycle |
-| `N` | Advance to next cycle (stop + init) |
-| `C` | Clear all events and freeze frames |
-| `F` | Toggle freeze frames panel |
-| `R` | Toggle raw/physical snapshot view (in freeze frames panel) |
-| `E` | Edit CalibConfig for selected event |
-| `?` / `H` | Show/hide help overlay |
-| `Q` | Quit |
-
-**Event Selection:**
-- Use `↑/↓` to navigate and view event details
-- Press `Space` to select an event for triggering (shown in teal)
-- Selected event persists until a new selection
-
-**Editing CalibConfig:**
-1. Press `E` to enter edit mode
-2. Use `↑/↓` to change values (applies immediately)
-3. Use `Tab` to cycle through fields (step_up, step_down, debounce_type, debounce_behavior, confirmation_threshold, aging_threshold, priority, save_trigger, record_update)
-4. Press `Esc` to cancel and exit edit mode
+- Interactive TUI with live system state display
+- 25 configurable diagnostic events with UDS status tracking
+- Freeze frame storage with physical and raw hex views
+- Press `?` in the TUI to see all keyboard controls
 
 ## Development
 
