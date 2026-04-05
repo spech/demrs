@@ -1,6 +1,6 @@
 use core::ptr::{addr_of, addr_of_mut};
 use crossterm::{
-    event::{KeyCode, KeyEvent, KeyModifiers},
+    event::{KeyCode, KeyEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -178,7 +178,8 @@ fn get_trend_indicator<T: PartialEq + PartialOrd>(current: T, old: T) -> &'stati
 
 struct App {
     manager: EventManager,
-    selected_event: usize,
+    viewed_event: usize,
+    trigger_event: Option<usize>,
     show_freeze_frames: bool,
     selected_ff: Option<usize>,
     editing_calib: bool,
@@ -330,7 +331,8 @@ impl App {
 
         Self {
             manager,
-            selected_event: 0,
+            viewed_event: 0,
+            trigger_event: None,
             show_freeze_frames: false,
             selected_ff: None,
             editing_calib: false,
@@ -432,7 +434,7 @@ impl App {
     }
 
     fn apply_calib_edit(&mut self, value: &str) {
-        let event = &mut self.manager.events[self.selected_event];
+        let event = &mut self.manager.events[self.viewed_event];
         match self.editing_field {
             0 => {
                 if let Ok(v) = value.parse::<i16>() {
@@ -761,7 +763,11 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
                 flags.push('-');
             }
 
-            let style = if i == app.selected_event {
+            let style = if app.trigger_event == Some(i) {
+                Style::default()
+                    .fg(theme::CYAN)
+                    .add_modifier(Modifier::BOLD)
+            } else if i == app.viewed_event {
                 Style::default()
                     .fg(theme::YELLOW)
                     .add_modifier(Modifier::BOLD)
@@ -807,7 +813,7 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
 }
 
 fn render_event_details(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
-    let event = &app.manager.events[app.selected_event];
+    let event = &app.manager.events[app.viewed_event];
     let status = event.status();
     let cal = &event.cal_config;
 
@@ -815,7 +821,7 @@ fn render_event_details(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
 
     lines.push(Line::from(vec![
         Span::raw("Event ID: "),
-        Span::raw(format!("{}", app.selected_event)).bold(),
+        Span::raw(format!("{}", app.viewed_event)).bold(),
     ]));
 
     lines.push(Line::from(""));
@@ -931,7 +937,7 @@ fn render_event_details(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
                     .borders(Borders::ALL)
                     .border_style(Style::default().fg(theme::MUTED))
                     .title_style(Style::default().fg(theme::CYAN))
-                    .title(format!(" Details - Event {} ", app.selected_event)),
+                    .title(format!(" Details - Event {} ", app.viewed_event)),
             )
             .scroll((app.scroll as u16, 0)),
         area,
@@ -1089,7 +1095,7 @@ fn render_footer(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
         Span::raw("| Last: ").fg(theme::MUTED),
         Span::raw(&app.last_action),
         Span::raw(" | ").fg(theme::MUTED),
-        Span::raw("[1-9] PreFailed  [Shift+1-9] PrePassed  [Ctrl+1-9] Failed  [I] Init  [S] Stop  [N] Next Cycle  [C] Clear  [F] FF Panel  [?] Help  [Q] Quit"),
+        Span::raw("[Space] Select  [1] PreFail  [2] Fail  [3] PrePass  [4] Pass  [I] Init  [S] Stop  [N] Cycle  [C] Clear  [F] FF  [?] Help  [Q] Quit"),
     ]);
 
     f.render_widget(
@@ -1183,16 +1189,24 @@ fn render_help_overlay(f: &mut ratatui::Frame<'_>, app: &App) {
             .underlined()
             .fg(theme::BLUE)]),
         Line::from(vec![
-            Span::raw("  [1-9]         ").fg(theme::YELLOW),
-            Span::raw("Trigger PreFailed"),
+            Span::raw("  [Space]        ").fg(theme::YELLOW),
+            Span::raw("Select event for triggering (teal)"),
         ]),
         Line::from(vec![
-            Span::raw("  [Shift+1-9]   ").fg(theme::YELLOW),
-            Span::raw("Trigger PrePassed"),
+            Span::raw("  [1]            ").fg(theme::YELLOW),
+            Span::raw("Trigger selected event (PreFailed)"),
         ]),
         Line::from(vec![
-            Span::raw("  [Ctrl+1-9]     ").fg(theme::YELLOW),
-            Span::raw("Trigger Failed (immediate)"),
+            Span::raw("  [2]            ").fg(theme::YELLOW),
+            Span::raw("Trigger selected event (Failed)"),
+        ]),
+        Line::from(vec![
+            Span::raw("  [3]            ").fg(theme::YELLOW),
+            Span::raw("Trigger selected event (PrePassed)"),
+        ]),
+        Line::from(vec![
+            Span::raw("  [4]            ").fg(theme::YELLOW),
+            Span::raw("Trigger selected event (Passed)"),
         ]),
         Line::from(""),
         Line::from(vec![Span::raw("Cycle Control")
@@ -1235,7 +1249,7 @@ fn render_help_overlay(f: &mut ratatui::Frame<'_>, app: &App) {
             .fg(theme::BLUE)]),
         Line::from(vec![
             Span::raw("  [↑/↓]          ").fg(theme::YELLOW),
-            Span::raw("Navigate events / freeze frames"),
+            Span::raw("Navigate (view details, yellow highlight)"),
         ]),
         Line::from(vec![
             Span::raw("  [PgUp/PgDn]    ").fg(theme::YELLOW),
@@ -1357,17 +1371,41 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
             app.show_help = !app.show_help;
         }
 
-        KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
-            let num = c.to_digit(10).unwrap() as usize;
-            if num < app.manager.events.len() {
-                if key.modifiers.contains(KeyModifiers::CONTROL) {
-                    app.trigger_event(num, Status::Failed);
-                } else if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    app.trigger_event(num, Status::PrePassed);
-                } else {
-                    app.trigger_event(num, Status::PreFailed);
-                }
+        KeyCode::Char('1') => {
+            if let Some(event_id) = app.trigger_event {
+                app.trigger_event(event_id, Status::PreFailed);
+            } else {
+                app.last_action = "Press Space to select an event first".to_string();
             }
+        }
+
+        KeyCode::Char('2') => {
+            if let Some(event_id) = app.trigger_event {
+                app.trigger_event(event_id, Status::Failed);
+            } else {
+                app.last_action = "Press Space to select an event first".to_string();
+            }
+        }
+
+        KeyCode::Char('3') => {
+            if let Some(event_id) = app.trigger_event {
+                app.trigger_event(event_id, Status::PrePassed);
+            } else {
+                app.last_action = "Press Space to select an event first".to_string();
+            }
+        }
+
+        KeyCode::Char('4') => {
+            if let Some(event_id) = app.trigger_event {
+                app.trigger_event(event_id, Status::Passed);
+            } else {
+                app.last_action = "Press Space to select an event first".to_string();
+            }
+        }
+
+        KeyCode::Char(' ') => {
+            app.trigger_event = Some(app.viewed_event);
+            app.last_action = format!("Selected Event {} for triggering", app.viewed_event);
         }
 
         KeyCode::Char('i') | KeyCode::Char('I') => {
@@ -1405,7 +1443,7 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
                 app.last_action = format!(
                     "Editing {} for Event {}",
                     App::get_calib_field_name(0),
-                    app.selected_event
+                    app.viewed_event
                 );
             }
         }
@@ -1431,8 +1469,8 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
                     app.selected_ff = Some(0);
                 }
             } else {
-                if app.selected_event > 0 {
-                    app.selected_event -= 1;
+                if app.viewed_event > 0 {
+                    app.viewed_event -= 1;
                     app.scroll = 0;
                 }
             }
@@ -1450,8 +1488,8 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
                     app.selected_ff = Some(0);
                 }
             } else {
-                if app.selected_event < app.manager.events.len() - 1 {
-                    app.selected_event += 1;
+                if app.viewed_event < app.manager.events.len() - 1 {
+                    app.viewed_event += 1;
                     app.scroll = 0;
                 }
             }
@@ -1494,7 +1532,7 @@ fn handle_calib_edit_input(app: &mut App, key: KeyEvent) {
             app.last_action = format!(
                 "Editing {} for Event {}",
                 App::get_calib_field_name(app.editing_field),
-                app.selected_event
+                app.viewed_event
             );
         }
 

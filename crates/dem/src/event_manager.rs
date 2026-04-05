@@ -114,8 +114,6 @@ impl EventManager {
     pub fn clear(&mut self) {
         for event in self.events.iter_mut() {
             event.clear();
-            event.nv_config.uds_status = UdsStatusByte::from_raw(0);
-            event.uds_status_old = UdsStatusByte::from_raw(0);
         }
         let _lock = self.freeze_frames_lock.lock();
         self.freeze_frames.clear();

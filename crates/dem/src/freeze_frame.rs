@@ -245,9 +245,7 @@ impl FreezeFrameList {
     ///
     /// `Ok(index)` - The index where the entry was inserted.
     /// `Err(FreezeFrameListError::ListFullError)` if the list is full and no entry has lower priority.
-    pub fn insert(&mut self, mut freeze_frame: FreezeFrame) -> Result<usize, FreezeFrameListError> {
-        freeze_frame.snapshot_data = [0u8; SNAPSHOT_DATA_SIZE];
-
+    pub fn insert(&mut self, freeze_frame: FreezeFrame) -> Result<usize, FreezeFrameListError> {
         if self.is_full() {
             let new_priority = freeze_frame.priority;
             let lowest = self.find_lowest_priority();
@@ -438,13 +436,25 @@ mod tests {
     }
 
     #[test]
-    fn fn_insert_zero_initializes_data() {
+    fn fn_insert_preserves_snapshot_data() {
         let mut list = FreezeFrameList::test_new();
 
-        let idx = list.insert(create_freeze_frame(1, 10, 100, 200)).unwrap();
+        let mut test_data = [0u8; SNAPSHOT_DATA_SIZE];
+        test_data[0] = 0xDE;
+        test_data[1] = 0xAD;
+        test_data[2] = 0xBE;
+        test_data[3] = 0xEF;
+
+        let mut freeze_frame = create_freeze_frame(1, 10, 100, 200);
+        freeze_frame.snapshot_data = test_data;
+
+        let idx = list.insert(freeze_frame).unwrap();
         let ff = list.get_mut(idx).unwrap();
 
-        assert_eq!(ff.snapshot_data, [0u8; SNAPSHOT_DATA_SIZE]);
+        assert_eq!(ff.snapshot_data[0], 0xDE);
+        assert_eq!(ff.snapshot_data[1], 0xAD);
+        assert_eq!(ff.snapshot_data[2], 0xBE);
+        assert_eq!(ff.snapshot_data[3], 0xEF);
     }
 
     #[test]
