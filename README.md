@@ -100,7 +100,7 @@ confirmator = "0.1"
 
 ### DEM TUI
 
-An interactive terminal UI for observing and interacting with the DEM library, featuring a Tokyo Night color theme.
+An interactive terminal UI for observing and interacting with the DEM library.
 
 **Run the TUI:**
 

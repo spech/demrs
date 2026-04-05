@@ -6,12 +6,12 @@ use crossterm::{
 };
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{
-        Block, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Scrollbar,
-        ScrollbarOrientation, ScrollbarState, Table,
+        Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Table,
     },
     Terminal,
 };
@@ -57,6 +57,7 @@ mod theme {
     pub const YELLOW: Color = Color::Rgb(224, 175, 104);
     pub const CYAN: Color = Color::Rgb(122, 162, 255);
     pub const BLUE: Color = Color::Rgb(86, 182, 194);
+    pub const ORANGE: Color = Color::Rgb(255, 165, 0);
     pub const MUTED: Color = Color::Rgb(86, 95, 137);
     pub const SELECTION: Color = Color::Rgb(36, 40, 59);
 }
@@ -949,7 +950,7 @@ fn render_body(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
             .split(area);
 
         render_event_list(f, app, chunks[0]);
-        render_event_details(f, app, chunks[1]);
+        render_event_details_wrapper(f, app, chunks[1]);
         render_live_system_state(f, app, chunks[2]);
     }
 }
@@ -958,7 +959,7 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
     let state = unsafe { &*(&raw const SYSTEM_STATE) };
     let old_state = unsafe { &*(&raw const SYSTEM_STATE_OLD) };
 
-    let make_trend_cell = |current: u32, old: u32, color: ratatui::style::Color| -> Line<'static> {
+    let make_trend_cell = |current: u32, old: u32, color: ratatui::style::Color| -> Cell<'static> {
         let trend = get_trend_indicator(current, old);
         let trend_color = if current > old {
             color
@@ -967,11 +968,11 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
         } else {
             theme::MUTED
         };
-        Line::from(Span::raw(format!("{:>2}", trend)).fg(trend_color))
+        Cell::from(Span::raw(format!("{:>2}", trend)).fg(trend_color))
     };
 
     let make_value_trend_cell =
-        |current: u32, old: u32, up_color: ratatui::style::Color| -> Line<'static> {
+        |current: u32, old: u32, up_color: ratatui::style::Color| -> Cell<'static> {
             let trend = get_trend_indicator(current, old);
             let trend_color = if current > old {
                 up_color
@@ -980,16 +981,16 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             } else {
                 theme::MUTED
             };
-            Line::from(Span::raw(format!("{:>2}", trend)).fg(trend_color))
+            Cell::from(Span::raw(format!("{:>2}", trend)).fg(trend_color))
         };
+    let make_value_cell = |text: String| -> Cell<'static> {
+        Cell::from(Line::from(Span::raw(format!("{:>10}", text))))
+    };
 
     let rows: Vec<Row> = vec![
         Row::new(vec![
-            Line::from(Span::raw("Battery Voltage")),
-            Line::from(Span::raw(format!(
-                "{:>7.1}V",
-                state.battery_voltage_x10 as f32 / 10.0
-            ))),
+            Cell::from(Span::raw("Battery Voltage")),
+            make_value_cell(format!("{:>7.1}V", state.battery_voltage_x10 as f32 / 10.0)),
             make_trend_cell(
                 state.battery_voltage_x10 as u32,
                 old_state.battery_voltage_x10 as u32,
@@ -997,8 +998,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Engine RPM")),
-            Line::from(Span::raw(format!("{:>6} rpm", state.engine_rpm))),
+            Cell::from(Span::raw("Engine RPM")),
+            make_value_cell(format!("{:>6} rpm", state.engine_rpm)),
             make_trend_cell(
                 state.engine_rpm as u32,
                 old_state.engine_rpm as u32,
@@ -1006,8 +1007,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Vehicle Speed")),
-            Line::from(Span::raw(format!("{:>5} km/h", state.vehicle_speed))),
+            Cell::from(Span::raw("Vehicle Speed")),
+            make_value_cell(format!("{:>5} km/h", state.vehicle_speed)),
             make_value_trend_cell(
                 state.vehicle_speed as u32,
                 old_state.vehicle_speed as u32,
@@ -1015,8 +1016,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Coolant Temp")),
-            Line::from(Span::raw(format!("{:>4}°C", state.coolant_temp))),
+            Cell::from(Span::raw("Coolant Temp")),
+            make_value_cell(format!("{:>4}°C", state.coolant_temp)),
             make_trend_cell(
                 state.coolant_temp as u32,
                 old_state.coolant_temp as u32,
@@ -1024,8 +1025,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Intake Air")),
-            Line::from(Span::raw(format!("{:>4}°C", state.intake_air_temp))),
+            Cell::from(Span::raw("Intake Air")),
+            make_value_cell(format!("{:>4}°C", state.intake_air_temp)),
             make_trend_cell(
                 state.intake_air_temp as u32,
                 old_state.intake_air_temp as u32,
@@ -1033,8 +1034,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Throttle")),
-            Line::from(Span::raw(format!("{:>4}%", state.throttle_position))),
+            Cell::from(Span::raw("Throttle")),
+            make_value_cell(format!("{:>4}%", state.throttle_position)),
             make_value_trend_cell(
                 state.throttle_position as u32,
                 old_state.throttle_position as u32,
@@ -1042,8 +1043,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Fuel Level")),
-            Line::from(Span::raw(format!("{:>5}%", state.fuel_level))),
+            Cell::from(Span::raw("Fuel Level")),
+            make_value_cell(format!("{:>5}%", state.fuel_level)),
             make_trend_cell(
                 state.fuel_level as u32,
                 old_state.fuel_level as u32,
@@ -1051,8 +1052,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Oil Pressure")),
-            Line::from(Span::raw(format!("{:>5}kPa", state.oil_pressure))),
+            Cell::from(Span::raw("Oil Pressure")),
+            make_value_cell(format!("{:>5}kPa", state.oil_pressure)),
             make_trend_cell(
                 state.oil_pressure as u32,
                 old_state.oil_pressure as u32,
@@ -1060,8 +1061,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Trans Temp")),
-            Line::from(Span::raw(format!("{:>4}°C", state.transmission_temp))),
+            Cell::from(Span::raw("Trans Temp")),
+            make_value_cell(format!("{:>4}°C", state.transmission_temp)),
             make_trend_cell(
                 state.transmission_temp as u32,
                 old_state.transmission_temp as u32,
@@ -1069,8 +1070,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Exhaust Temp")),
-            Line::from(Span::raw(format!("{:>4}°C", state.exhaust_temp))),
+            Cell::from(Span::raw("Exhaust Temp")),
+            make_value_cell(format!("{:>4}°C", state.exhaust_temp)),
             make_trend_cell(
                 state.exhaust_temp as u32,
                 old_state.exhaust_temp as u32,
@@ -1078,8 +1079,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("MAF Rate")),
-            Line::from(Span::raw(format!("{:>5}g/s", state.maf_rate))),
+            Cell::from(Span::raw("MAF Rate")),
+            make_value_cell(format!("{:>5}g/s", state.maf_rate)),
             make_trend_cell(
                 state.maf_rate as u32,
                 old_state.maf_rate as u32,
@@ -1087,8 +1088,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Dyno Load")),
-            Line::from(Span::raw(format!("{:>4}%", state.dyno_load))),
+            Cell::from(Span::raw("Dyno Load")),
+            make_value_cell(format!("{:>4}%", state.dyno_load)),
             make_value_trend_cell(
                 state.dyno_load as u32,
                 old_state.dyno_load as u32,
@@ -1096,8 +1097,8 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("Fuel Press")),
-            Line::from(Span::raw(format!("{:>6}kPa", state.fuel_pressure))),
+            Cell::from(Span::raw("Fuel Press")),
+            make_value_cell(format!("{:>6}kPa", state.fuel_pressure)),
             make_trend_cell(
                 state.fuel_pressure as u32,
                 old_state.fuel_pressure as u32,
@@ -1105,19 +1106,19 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             ),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("OBD Cycle")),
-            Line::from(Span::raw(format!("{:>8}", state.obd_cycle_counter))),
-            Line::from(Span::raw("  ")),
+            Cell::from(Span::raw("OBD Cycle")),
+            make_value_cell(format!("{:>8}", state.obd_cycle_counter)),
+            Cell::from(Span::raw("  ")),
         ]),
         Row::new(vec![
-            Line::from(Span::raw("System Mode")),
-            Line::from(match state.system_mode {
+            Cell::from(Span::raw("System Mode")),
+            Cell::from(match state.system_mode {
                 0x01 => Span::raw("   Normal").fg(theme::GREEN),
                 0x02 => Span::raw("Fault Active").fg(theme::RED),
                 0x03 => Span::raw("Fault Healed").fg(theme::YELLOW),
                 _ => Span::raw("   Unknown").fg(theme::MUTED),
             }),
-            Line::from(Span::raw("  ")),
+            Cell::from(Span::raw("  ")),
         ]),
     ];
 
@@ -1131,9 +1132,9 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
     )
     .header(
         Row::new(vec![
-            Line::from(Span::raw("Parameter")),
-            Line::from(Span::raw("Value")),
-            Line::from(Span::raw("")),
+            Cell::from(Span::raw("Parameter")),
+            Cell::from(Line::from(Span::raw(format!("{:>10}", "Value")))),
+            Cell::from(Span::raw("")),
         ])
         .style(
             Style::default()
@@ -1153,7 +1154,7 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
 }
 
 fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
-    let items: Vec<ListItem> = app
+    let rows: Vec<Row> = app
         .manager
         .events
         .iter()
@@ -1161,32 +1162,41 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
         .map(|(i, event)| {
             let status = event.status();
             let name = EVENT_NAMES.get(i).unwrap_or(&"Unknown");
+            let counter = event.debounce_counter();
 
-            let mut flags = String::new();
-            if status.tf() {
-                flags.push('T');
-            } else {
-                flags.push('-');
-            }
-            if status.tftoc() {
-                flags.push('F');
-            } else {
-                flags.push('-');
-            }
-            if status.pdtc() {
-                flags.push('P');
-            } else {
-                flags.push('-');
-            }
-            if status.cdtc() {
-                flags.push('C');
-            } else {
-                flags.push('-');
-            }
+            let (t_flag, f_flag, p_flag, c_flag) = (
+                if status.tf() { "T" } else { "-" },
+                if status.tftoc() { "F" } else { "-" },
+                if status.pdtc() { "P" } else { "-" },
+                if status.cdtc() { "C" } else { "-" },
+            );
 
-            let style = if app.trigger_event == Some(i) {
+            let (t_color, f_color, p_color, c_color) = (
+                if status.tf() {
+                    theme::RED
+                } else {
+                    theme::MUTED
+                },
+                if status.tftoc() {
+                    theme::RED
+                } else {
+                    theme::MUTED
+                },
+                if status.pdtc() {
+                    theme::YELLOW
+                } else {
+                    theme::MUTED
+                },
+                if status.cdtc() {
+                    theme::RED
+                } else {
+                    theme::MUTED
+                },
+            );
+
+            let row_style = if app.trigger_event == Some(i) {
                 Style::default()
-                    .fg(theme::CYAN)
+                    .fg(theme::ORANGE)
                     .add_modifier(Modifier::BOLD)
             } else if i == app.viewed_event {
                 Style::default()
@@ -1198,182 +1208,278 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
                 Style::default().fg(theme::FG)
             };
 
-            let counter = event.debounce_counter();
-            let content = Line::from(vec![
-                Span::raw(format!("[{}] ", i)),
-                Span::raw(format!("{:<10}", name)),
-                Span::raw(" "),
-                Span::raw(format!("{:>6}", counter)),
-                Span::raw(" "),
-                Span::raw(format!("[{}]", flags)).fg(if status.cdtc() {
-                    theme::RED
-                } else if status.pdtc() {
-                    theme::YELLOW
-                } else if status.tf() {
-                    theme::RED
-                } else {
-                    theme::GREEN
-                }),
-            ]);
-
-            ListItem::new(content).style(style)
+            Row::new(vec![
+                Cell::from(Span::raw(format!("{:>3}", i))),
+                Cell::from(Span::raw(format!("{:<10}", name))),
+                Cell::from(Span::raw(format!("{:>6}", counter))),
+                Cell::from(Span::raw(t_flag).fg(t_color)),
+                Cell::from(Span::raw(f_flag).fg(f_color)),
+                Cell::from(Span::raw(p_flag).fg(p_color)),
+                Cell::from(Span::raw(c_flag).fg(c_color)),
+            ])
+            .style(row_style)
         })
         .collect();
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme::MUTED))
-                .title_style(Style::default().fg(theme::CYAN))
-                .title(" Events "),
-        )
-        .highlight_style(Style::default().bg(theme::SELECTION).fg(theme::YELLOW));
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(4),
+            Constraint::Length(11),
+            Constraint::Length(7),
+            Constraint::Length(2),
+            Constraint::Length(2),
+            Constraint::Length(2),
+            Constraint::Length(2),
+        ],
+    )
+    .header(
+        Row::new(vec![
+            Cell::from(Span::raw("Idx")),
+            Cell::from(Span::raw("Name")),
+            Cell::from(Span::raw("Counter")),
+            Cell::from(Span::raw("T")),
+            Cell::from(Span::raw("F")),
+            Cell::from(Span::raw("P")),
+            Cell::from(Span::raw("C")),
+        ])
+        .style(
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(theme::PURPLE),
+        ),
+    )
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::CYAN))
+            .title(" Events "),
+    )
+    .highlight_style(Style::default().bg(theme::SELECTION).fg(theme::ORANGE));
 
-    f.render_widget(list, area);
+    f.render_widget(table, area);
 }
 
-fn render_event_details(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
+fn render_event_details_wrapper(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
     let event = &app.manager.events[app.viewed_event];
     let status = event.status();
     let cal = &event.cal_config;
 
-    let mut lines: Vec<Line> = Vec::new();
+    let title = format!(" Details - {} ", EVENT_NAMES[app.viewed_event]);
+    f.render_widget(Clear, area);
+    f.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::CYAN))
+            .title(title),
+        area,
+    );
 
-    lines.push(Line::from(vec![
-        Span::raw("Event ID: "),
-        Span::raw(format!("{}", app.viewed_event)).bold(),
-    ]));
+    let inner = area.inner(Margin {
+        vertical: 1,
+        horizontal: 1,
+    });
 
-    lines.push(Line::from(""));
+    let inner_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(inner);
 
-    lines.push(Line::from("UDS Status Flags:").bold().underlined());
-    lines.push(Line::from(vec![
-        Span::raw("  TF (Test Failed):     "),
-        flag_span(status.tf()),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  TFTOC (Failed TOC):   "),
-        flag_span(status.tftoc()),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  PDTC (Pending DTC):  "),
-        flag_span(status.pdtc()),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  CDTC (Confirmed DTC):"),
-        flag_span(status.cdtc()),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  TFSLC (Failed SLC):  "),
-        flag_span(status.tfslc()),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  TNCSLC (NC SLC):     "),
-        flag_span(status.tncslc()),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  TNCTOC (NC This OC): "),
-        flag_span(status.tnctoc()),
-    ]));
+    let body_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(24),
+            Constraint::Percentage(28),
+            Constraint::Percentage(48),
+        ])
+        .split(inner_layout[0]);
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(vec![
-        Span::raw("Debounce Counter: "),
-        Span::raw(format!("{}", event.debounce_counter())).bold(),
-    ]));
+    render_uds_status_panel(f, status, body_layout[0]);
 
-    lines.push(Line::from(""));
-    lines.push(Line::from("NVM Counters:").bold().underlined());
-    lines.push(Line::from(vec![
-        Span::raw("  Occurrence Counter:    "),
-        Span::raw(format!("{}", event.nv_config.occurence_cntr)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  Aging Cycles:         "),
-        Span::raw(format!("{}", event.nv_config.aging_cycles)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  Confirmation Cycles:  "),
-        Span::raw(format!("{}", event.nv_config.confirmation_cycles)),
-    ]));
+    render_nvm_debounce_panel(f, event, body_layout[1]);
 
-    lines.push(Line::from(""));
-    lines.push(Line::from("Calibration Config:").bold().underlined());
-    lines.push(Line::from(vec![
-        Span::raw("  step_up:               "),
-        Span::raw(format!("{}", cal.step_up)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  step_down:             "),
-        Span::raw(format!("{}", cal.step_down)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  debounce_type:         "),
-        Span::raw(format!("{:?}", cal.debounce_type)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  debounce_behavior:     "),
-        Span::raw(format!("{:?}", cal.debounce_behavior)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  confirmation_threshold:"),
-        Span::raw(format!("{}", cal.confirmation_threshold)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  aging_threshold:      "),
-        Span::raw(format!("{}", cal.aging_threshold)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  priority:              "),
-        Span::raw(format!("{}", cal.priority)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  save_trigger:          "),
-        Span::raw(format!("{:?}", cal.save_trigger)),
-    ]));
-    lines.push(Line::from(vec![
-        Span::raw("  record_update:        "),
-        Span::raw(format!("{}", cal.record_update)),
-    ]));
+    render_calib_panel(f, cal, body_layout[2]);
 
     if app.editing_calib {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
+        let edit_line = Line::from(vec![
             Span::raw("Editing: ").fg(theme::CYAN),
             Span::raw(App::get_calib_field_name(app.editing_field)).bold(),
             Span::raw(" | Value: "),
             Span::raw(app.get_calib_field_value()).fg(theme::YELLOW),
             Span::raw(" | [↑/↓] Change  [Tab] Next  [Esc] Cancel"),
-        ]));
+        ]);
+        f.render_widget(
+            Paragraph::new(edit_line)
+                .style(Style::default().bg(theme::BG_LIGHT))
+                .alignment(ratatui::layout::Alignment::Center),
+            inner_layout[1],
+        );
     }
+}
 
-    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight).thumb_symbol("█");
-    let lines_len = lines.len();
+fn render_uds_status_panel(f: &mut ratatui::Frame<'_>, status: dem::UdsStatusByte, area: Rect) {
+    let rows = vec![
+        Row::new(vec![
+            Cell::from(Span::raw("UDS Status").bold().fg(theme::PURPLE)),
+            Cell::from(Span::raw("").fg(theme::PURPLE)),
+            Cell::from(Span::raw("").fg(theme::PURPLE)),
+        ])
+        .style(Style::default().bg(theme::BG_LIGHT)),
+        Row::new(vec![
+            Cell::from(Span::raw("TF")),
+            Cell::from(Span::raw("Test Failed")),
+            flag_cell(status.tf()),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("TFTOC")),
+            Cell::from(Span::raw("Failed TOC")),
+            flag_cell(status.tftoc()),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("PDTC")),
+            Cell::from(Span::raw("Pending DTC")),
+            flag_cell(status.pdtc()),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("CDTC")),
+            Cell::from(Span::raw("Confirmed DTC")),
+            flag_cell(status.cdtc()),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("TFSLC")),
+            Cell::from(Span::raw("Failed SLC")),
+            flag_cell(status.tfslc()),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("TNCSLC")),
+            Cell::from(Span::raw("NC SLC")),
+            flag_cell(status.tncslc()),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("TNCTOC")),
+            Cell::from(Span::raw("NC This OC")),
+            flag_cell(status.tnctoc()),
+        ]),
+    ];
 
-    f.render_widget(
-        Paragraph::new(lines)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme::MUTED))
-                    .title_style(Style::default().fg(theme::CYAN))
-                    .title(format!(" Details - Event {} ", app.viewed_event)),
-            )
-            .scroll((app.scroll as u16, 0)),
-        area,
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(10),
+            Constraint::Length(14),
+            Constraint::Length(8),
+        ],
     );
 
-    if lines_len > (area.height as usize - 3) {
-        let mut scroll_state = ScrollbarState::new(lines_len).position(app.scroll);
-        f.render_stateful_widget(
-            scrollbar,
-            area.inner(Margin {
-                vertical: 1,
-                horizontal: 0,
-            }),
-            &mut scroll_state,
-        );
+    f.render_widget(table, area);
+}
+
+fn render_nvm_debounce_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Rect) {
+    let rows = vec![
+        Row::new(vec![
+            Cell::from(Span::raw("NVM Counters").bold().fg(theme::PURPLE)),
+            Cell::from(Span::raw("").fg(theme::PURPLE)),
+        ])
+        .style(Style::default().bg(theme::BG_LIGHT)),
+        Row::new(vec![
+            Cell::from(Span::raw("Occurrence")),
+            Cell::from(Span::raw(format!("{:>8}", event.nv_config.occurence_cntr))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("Confirmation")),
+            Cell::from(Span::raw(format!(
+                "{:>8}",
+                event.nv_config.confirmation_cycles
+            ))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("Aging Cycles")),
+            Cell::from(Span::raw(format!("{:>8}", event.nv_config.aging_cycles))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("").style(Style::default().fg(theme::MUTED))),
+            Cell::from(Span::raw("").style(Style::default().fg(theme::MUTED))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("Debounce").bold()),
+            Cell::from(Span::raw(format!("{:>8}", event.debounce_counter())).fg(theme::CYAN)),
+        ]),
+    ];
+
+    let table = Table::new(rows, [Constraint::Length(14), Constraint::Length(10)]);
+
+    f.render_widget(table, area);
+}
+
+fn render_calib_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
+    let rows = vec![
+        Row::new(vec![
+            Cell::from(Span::raw("Calibration").bold().fg(theme::PURPLE)),
+            Cell::from(Span::raw("").fg(theme::PURPLE)),
+        ])
+        .style(Style::default().bg(theme::BG_LIGHT)),
+        Row::new(vec![
+            Cell::from(Span::raw("step_up")),
+            Cell::from(Span::raw(format!("{:>14}", cal.step_up))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("step_down")),
+            Cell::from(Span::raw(format!("{:>14}", cal.step_down))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("debounce_type")),
+            Cell::from(Span::raw(format!(
+                "{:>14}",
+                format!("{:?}", cal.debounce_type)
+            ))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("debounce_behavior")),
+            Cell::from(Span::raw(format!(
+                "{:>14}",
+                format!("{:?}", cal.debounce_behavior)
+            ))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("confirmation")),
+            Cell::from(Span::raw(format!("{:>14}", cal.confirmation_threshold))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("aging")),
+            Cell::from(Span::raw(format!("{:>14}", cal.aging_threshold))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("priority")),
+            Cell::from(Span::raw(format!("{:>14}", cal.priority))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("save_trigger")),
+            Cell::from(Span::raw(format!(
+                "{:>14}",
+                format!("{:?}", cal.save_trigger)
+            ))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("record_update")),
+            Cell::from(Span::raw(format!(
+                "{:>14}",
+                if cal.record_update { "Yes" } else { "No" }
+            ))),
+        ]),
+    ];
+
+    let table = Table::new(rows, [Constraint::Length(18), Constraint::Length(14)]);
+
+    f.render_widget(table, area);
+}
+
+fn flag_cell(value: bool) -> Cell<'static> {
+    if value {
+        Cell::from(Span::raw("[ON] ").fg(theme::GREEN).bold())
+    } else {
+        Cell::from(Span::raw("[OFF]").fg(theme::MUTED))
     }
 }
 
@@ -1639,14 +1745,6 @@ fn render_footer(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
     );
 }
 
-fn flag_span(value: bool) -> Span<'static> {
-    if value {
-        Span::raw("[ON] ").fg(theme::GREEN).bold()
-    } else {
-        Span::raw("[OFF]").fg(theme::MUTED)
-    }
-}
-
 fn format_hex_dump<'a>(data: &'a [u8], max_bytes: usize) -> Vec<Line<'a>> {
     let display_data = &data[..max_bytes.min(data.len())];
     display_data
@@ -1718,7 +1816,7 @@ fn render_help_overlay(f: &mut ratatui::Frame<'_>, app: &App) {
             .fg(theme::BLUE)]),
         Line::from(vec![
             Span::raw("  [Space]        ").fg(theme::YELLOW),
-            Span::raw("Select event for triggering (teal)"),
+            Span::raw("Select event for triggering (orange)"),
         ]),
         Line::from(vec![
             Span::raw("  [1]            ").fg(theme::YELLOW),
