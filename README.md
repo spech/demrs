@@ -36,7 +36,7 @@ readings to confirm a fault:
 ```
 [Not Complete] → [PreFailed/PrePassed] → [Confirmed]
                         ↓                      ↓
-                   [Healed] ← ← ← ← [Pending] → [Aged] → [Cleared]
+     [Healed] ← ← ← ← [Pending] → [Aged] → [Cleared]
 ```
 
 - **PDTC (Pending DTC)** - Temporary fault indicator
