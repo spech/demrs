@@ -49,6 +49,7 @@ impl From<FreezeFrameListError> for EventManagerError {
 /// - `events` - Slice of [`Event`] instances with fixed static addresses
 /// - `freeze_frames` - Reference to [`FreezeFrameList`] for persistent metadata
 /// - `snapshot_config` - Reference to [`SnapshotConfig`] for snapshot data sources
+/// - `timestamp` - Reference to the timestamp counter for freeze frame timestamps
 ///
 /// ## Thread Safety
 ///
@@ -66,6 +67,10 @@ pub struct EventManager {
     pub state: EventManagerState,
     /// Mutex to protect freeze frame operations from concurrent access.
     pub freeze_frames_lock: Mutex<()>,
+    /// Reference to the timestamp counter for freeze frame timestamps.
+    /// This is NVM data - persisted across power cycles, init, and clear.
+    /// Must be incremented externally (e.g., by a chronometer).
+    pub timestamp: &'static mut u32,
 }
 
 impl EventManager {
@@ -125,7 +130,6 @@ impl EventManager {
         condition: crate::Status,
         active: bool,
         sampling: f32,
-        timestamp: u32,
     ) -> Result<UdsStatusByte, EventManagerError> {
         if self.state != EventManagerState::On {
             return Err(EventManagerError::NotInitializedError);
@@ -142,7 +146,7 @@ impl EventManager {
             .map_err(|_| EventManagerError::EventStepError)?;
         let new_status = event.nv_config.uds_status;
 
-        self.store_in_freeze_frames(index, timestamp)?;
+        self.store_in_freeze_frames(index)?;
 
         Ok(new_status)
     }
@@ -164,11 +168,7 @@ impl EventManager {
         }
     }
 
-    fn store_in_freeze_frames(
-        &mut self,
-        index: usize,
-        timestamp: u32,
-    ) -> Result<(), EventManagerError> {
+    fn store_in_freeze_frames(&mut self, index: usize) -> Result<(), EventManagerError> {
         let event_id = index as EventId;
         let event = &self.events[index];
         let priority = event.cal_config.priority;
@@ -187,6 +187,8 @@ impl EventManager {
             let mut snapshot = [0u8; SNAPSHOT_DATA_SIZE];
             self.auto_capture_snapshot(&mut snapshot);
 
+            let timestamp = *self.timestamp;
+
             let _lock = self.freeze_frames_lock.lock();
 
             if let Some(existing) = self.freeze_frames.get_by_event_id_mut(event_id) {
@@ -204,6 +206,8 @@ impl EventManager {
                 };
                 self.freeze_frames.insert(freeze_frame)?;
             }
+
+            *self.timestamp += 1;
         }
 
         Ok(())

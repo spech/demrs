@@ -80,26 +80,29 @@ fn bdd_freeze_frame_list_full_eviction() {
         )))
     };
 
+    static mut TEST_TIMESTAMP: u32 = 0;
+
     let mut manager = EventManager {
         events,
         freeze_frames: ff_list,
         snapshot_config: create_empty_snapshot_config(),
         state: EventManagerState::Off,
         freeze_frames_lock: spin::Mutex::new(()),
+        timestamp: unsafe { &mut *(&raw mut TEST_TIMESTAMP) },
     };
 
     manager.init();
     for i in 0..24 {
-        manager
-            .step(i as u16, Status::Failed, true, 0.0, i)
-            .unwrap();
+        *manager.timestamp = i;
+        manager.step(i as u16, Status::Failed, true, 0.0).unwrap();
     }
 
     assert!(manager.freeze_frames.is_full());
     assert_eq!(manager.freeze_frames.len(), 24);
     assert!(manager.freeze_frames.get_by_event_id(0).is_some());
 
-    let err = manager.step(24, Status::Failed, true, 0.0, 24);
+    *manager.timestamp = 24;
+    let err = manager.step(24, Status::Failed, true, 0.0);
     assert!(err.is_err());
     assert_eq!(manager.freeze_frames.len(), 24);
     assert!(manager.freeze_frames.get_by_event_id(0).is_some());
@@ -168,26 +171,29 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         )))
     };
 
+    static mut TEST_TIMESTAMP: u32 = 0;
+
     let mut manager = EventManager {
         events,
         freeze_frames: ff_list,
         snapshot_config: create_empty_snapshot_config(),
         state: EventManagerState::Off,
         freeze_frames_lock: spin::Mutex::new(()),
+        timestamp: unsafe { &mut *(&raw mut TEST_TIMESTAMP) },
     };
 
     manager.init();
     for i in 0..24 {
-        manager
-            .step(i as u16, Status::Failed, true, 0.0, i)
-            .unwrap();
+        *manager.timestamp = i;
+        manager.step(i as u16, Status::Failed, true, 0.0).unwrap();
     }
 
     assert!(manager.freeze_frames.is_full());
     assert_eq!(manager.freeze_frames.len(), 24);
     assert!(manager.freeze_frames.get_by_event_id(0).is_some());
 
-    let err = manager.step(24, Status::Failed, true, 0.0, 24);
+    *manager.timestamp = 24;
+    let err = manager.step(24, Status::Failed, true, 0.0);
     assert!(err.is_err());
     assert_eq!(manager.freeze_frames.len(), 24);
     assert!(manager.freeze_frames.get_by_event_id(0).is_some());
@@ -203,7 +209,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
 /// **Setup**: Uses fixture event 13 which has save_trigger = OnPdtc
 ///
 /// **Expected**: After one step with Status::Failed, pdtc rises and a freeze
-/// frame is created with event_id=13, priority=14, and timestamps set to 100.
+/// frame is created with event_id=13, priority=14, and timestamps set to 0.
 #[test]
 #[serial]
 fn bdd_freeze_frame_list_onpdtc_trigger() {
@@ -216,14 +222,15 @@ fn bdd_freeze_frame_list_onpdtc_trigger() {
     manager.clear();
     manager.init();
 
-    manager.step(13, Status::Failed, true, 0.0, 100).unwrap();
+    *manager.timestamp = 0;
+    manager.step(13, Status::Failed, true, 0.0).unwrap();
 
     assert_eq!(manager.freeze_frames.len(), 1);
     let record = manager.freeze_frames.get_by_event_id(13).unwrap();
     assert_eq!(record.event_id, 13);
     assert_eq!(record.priority, 14);
-    assert_eq!(record.first_occurrence_time, 100);
-    assert_eq!(record.last_occurrence_time, 100);
+    assert_eq!(record.first_occurrence_time, 0);
+    assert_eq!(record.last_occurrence_time, 0);
 }
 
 /// Tests that OnCdtc trigger creates a freeze frame on cdtc rising edge.
@@ -253,13 +260,15 @@ fn bdd_freeze_frame_list_oncdtc_trigger() {
     manager.clear();
     manager.init();
 
-    manager.step(0, Status::Failed, true, 0.0, 100).unwrap();
+    *manager.timestamp = 0;
+    manager.step(0, Status::Failed, true, 0.0).unwrap();
     assert!(manager.freeze_frames.get_by_event_id(0).is_none());
 
     manager.stop();
     manager.init();
 
-    let status = manager.step(0, Status::Failed, true, 0.0, 200).unwrap();
+    *manager.timestamp = 1;
+    let status = manager.step(0, Status::Failed, true, 0.0).unwrap();
     assert!(status.cdtc());
     assert!(manager.freeze_frames.get_by_event_id(0).is_some());
 }
@@ -295,13 +304,15 @@ fn bdd_freeze_frame_list_remove_aged_event() {
     manager.clear();
     manager.init();
 
-    manager.step(12, Status::Failed, true, 0.0, 100).unwrap();
+    *manager.timestamp = 0;
+    manager.step(12, Status::Failed, true, 0.0).unwrap();
     assert!(manager.freeze_frames.get_by_event_id(12).is_none());
 
     manager.stop();
     manager.init();
 
-    let status = manager.step(12, Status::Failed, true, 0.0, 200).unwrap();
+    *manager.timestamp = 1;
+    let status = manager.step(12, Status::Failed, true, 0.0).unwrap();
     assert!(status.cdtc());
     assert!(manager.freeze_frames.get_by_event_id(12).is_some());
 
@@ -310,12 +321,10 @@ fn bdd_freeze_frame_list_remove_aged_event() {
     manager.events[12].nv_config.uds_status.set_tftoc(true);
     manager.events[12].nv_config.uds_status.set_cdtc(true);
 
-    for i in 0..11 {
+    for _ in 0..11 {
         manager.events[12].nv_config.uds_status.set_tftoc(false);
         manager.events[12].nv_config.uds_status.set_tnctoc(false);
-        manager
-            .step(12, Status::Passed, true, 0.0, 300 + i)
-            .unwrap();
+        manager.step(12, Status::Passed, true, 0.0).unwrap();
         manager.stop();
         manager.init();
     }
@@ -337,11 +346,11 @@ fn bdd_freeze_frame_list_remove_aged_event() {
 ///
 /// **Flow**:
 /// 1. clear() + init()
-/// 2. First failure at timestamp 100: record created, occurrence_counter = 1
+/// 2. First failure at timestamp 0: record created, occurrence_counter = 1
 /// 3. Passed to reset tf
-/// 4. Second failure at timestamp 200: last_occurrence_time updated to 200
+/// 4. Second failure at timestamp 2: last_occurrence_time updated to 2
 ///
-/// **Expected**: first_occurrence_time remains 100 (unchanged), last_occurrence_time becomes 200.
+/// **Expected**: first_occurrence_time remains 0 (unchanged), last_occurrence_time becomes 2.
 #[test]
 #[serial]
 fn bdd_freeze_frame_list_new_occurence_update_last_occurrence_time() {
@@ -354,21 +363,23 @@ fn bdd_freeze_frame_list_new_occurence_update_last_occurrence_time() {
     manager.clear();
     manager.init();
 
-    manager.step(23, Status::Failed, true, 0.0, 100).unwrap();
+    *manager.timestamp = 0;
+    manager.step(23, Status::Failed, true, 0.0).unwrap();
 
     assert_eq!(manager.events[23].nv_config.occurence_cntr, 1);
     assert_eq!(manager.freeze_frames.len(), 1);
     let record = manager.freeze_frames.get_by_event_id(23).unwrap();
-    assert_eq!(record.first_occurrence_time, 100);
-    assert_eq!(record.last_occurrence_time, 100);
+    assert_eq!(record.first_occurrence_time, 0);
+    assert_eq!(record.last_occurrence_time, 0);
 
-    manager.step(23, Status::Passed, true, 0.0, 150).unwrap();
+    manager.step(23, Status::Passed, true, 0.0).unwrap();
 
-    manager.step(23, Status::Failed, true, 0.0, 200).unwrap();
+    *manager.timestamp = 2;
+    manager.step(23, Status::Failed, true, 0.0).unwrap();
 
     let record = manager.freeze_frames.get_by_event_id(23).unwrap();
-    assert_eq!(record.first_occurrence_time, 100);
-    assert_eq!(record.last_occurrence_time, 200);
+    assert_eq!(record.first_occurrence_time, 0);
+    assert_eq!(record.last_occurrence_time, 2);
 }
 
 /// Tests that OnTf trigger creates a freeze frame on tf rising edge.
@@ -398,14 +409,15 @@ fn bdd_freeze_frame_list_ontf_trigger() {
 
     // Event 23 has save_trigger: OnTf
     // After one Failed step, tf rises and cdtc is set (confirmation_threshold=1)
-    manager.step(23, Status::Failed, true, 0.0, 100).unwrap();
+    *manager.timestamp = 0;
+    manager.step(23, Status::Failed, true, 0.0).unwrap();
 
     assert_eq!(manager.freeze_frames.len(), 1);
     let record = manager.freeze_frames.get_by_event_id(23).unwrap();
     assert_eq!(record.event_id, 23);
     assert_eq!(record.priority, 24);
-    assert_eq!(record.first_occurrence_time, 100);
-    assert_eq!(record.last_occurrence_time, 100);
+    assert_eq!(record.first_occurrence_time, 0);
+    assert_eq!(record.last_occurrence_time, 0);
 }
 
 /// Tests that OnTftoc trigger creates a freeze frame on tftoc rising edge.
@@ -435,14 +447,15 @@ fn bdd_freeze_frame_list_ontftoc_trigger() {
 
     // Event 24 has save_trigger: OnTftoc
     // After one Failed step, tf and tftoc rise
-    manager.step(24, Status::Failed, true, 0.0, 100).unwrap();
+    *manager.timestamp = 0;
+    manager.step(24, Status::Failed, true, 0.0).unwrap();
 
     assert_eq!(manager.freeze_frames.len(), 1);
     let record = manager.freeze_frames.get_by_event_id(24).unwrap();
     assert_eq!(record.event_id, 24);
     assert_eq!(record.priority, 25);
-    assert_eq!(record.first_occurrence_time, 100);
-    assert_eq!(record.last_occurrence_time, 100);
+    assert_eq!(record.first_occurrence_time, 0);
+    assert_eq!(record.last_occurrence_time, 0);
 }
 
 /// Tests that record_update: false prevents last_occurrence_time from being updated.
@@ -454,12 +467,12 @@ fn bdd_freeze_frame_list_ontftoc_trigger() {
 ///
 /// **Flow**:
 /// 1. clear() + init()
-/// 2. step(Failed) - freeze frame created at t=100
+/// 2. step(Failed) - freeze frame created at t=0
 /// 3. stop() + init()
 /// 4. step(Failed) - pdtc rises again, freeze frame exists but shouldn't update
-/// 5. Verify last_occurrence_time remains 100
+/// 5. Verify last_occurrence_time remains 0
 ///
-/// **Expected**: last_occurrence_time stays at 100 despite second trigger.
+/// **Expected**: last_occurrence_time stays at 0 despite second trigger.
 #[test]
 #[serial]
 fn bdd_freeze_frame_list_record_update_disabled() {
@@ -473,22 +486,24 @@ fn bdd_freeze_frame_list_record_update_disabled() {
     manager.init();
 
     // Event 13 has save_trigger: OnPdtc, record_update: false
-    // First occurrence at t=100
-    manager.step(13, Status::Failed, true, 0.0, 100).unwrap();
+    // First occurrence at t=0
+    *manager.timestamp = 0;
+    manager.step(13, Status::Failed, true, 0.0).unwrap();
 
     assert_eq!(manager.freeze_frames.len(), 1);
     let record = manager.freeze_frames.get_by_event_id(13).unwrap();
-    assert_eq!(record.first_occurrence_time, 100);
-    assert_eq!(record.last_occurrence_time, 100);
+    assert_eq!(record.first_occurrence_time, 0);
+    assert_eq!(record.last_occurrence_time, 0);
 
     manager.stop();
     manager.init();
 
-    // Second occurrence at t=200 - pdtc rises again
-    manager.step(13, Status::Failed, true, 0.0, 200).unwrap();
+    // Second occurrence - pdtc rises again
+    *manager.timestamp = 1;
+    manager.step(13, Status::Failed, true, 0.0).unwrap();
 
     // record_update is false, so last_occurrence_time should NOT be updated
     let record = manager.freeze_frames.get_by_event_id(13).unwrap();
-    assert_eq!(record.first_occurrence_time, 100);
-    assert_eq!(record.last_occurrence_time, 100);
+    assert_eq!(record.first_occurrence_time, 0);
+    assert_eq!(record.last_occurrence_time, 0);
 }

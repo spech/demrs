@@ -1,5 +1,9 @@
-use core::ptr::addr_of;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use core::ptr::{addr_of, addr_of_mut};
+use crossterm::{
+    event::{KeyCode, KeyEvent, KeyModifiers},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -12,6 +16,7 @@ use ratatui::{
     Terminal,
 };
 use std::io;
+use std::time::{Duration, Instant};
 
 mod theme {
     use ratatui::style::Color;
@@ -104,6 +109,73 @@ static mut SNAPSHOT_CONFIG: SnapshotConfig = SnapshotConfig {
     count: 0,
 };
 
+static mut TIMESTAMP: u32 = 0;
+
+static mut SIMULATION_TICK: u32 = 0;
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct SystemState {
+    battery_voltage_x10: u8,
+    engine_rpm: u16,
+    vehicle_speed: u16,
+    coolant_temp: u8,
+    intake_air_temp: u8,
+    throttle_position: u8,
+    obd_cycle_counter: u16,
+    system_mode: u8,
+}
+
+static mut SYSTEM_STATE: SystemState = SystemState {
+    battery_voltage_x10: 120,
+    engine_rpm: 0,
+    vehicle_speed: 0,
+    coolant_temp: 20,
+    intake_air_temp: 20,
+    throttle_position: 0,
+    obd_cycle_counter: 0,
+    system_mode: 0x01,
+};
+
+static mut SYSTEM_STATE_OLD: SystemState = SystemState {
+    battery_voltage_x10: 120,
+    engine_rpm: 0,
+    vehicle_speed: 0,
+    coolant_temp: 20,
+    intake_air_temp: 20,
+    throttle_position: 0,
+    obd_cycle_counter: 0,
+    system_mode: 0x01,
+};
+
+fn update_live_system_state(tick: u32) {
+    unsafe {
+        SYSTEM_STATE_OLD = SYSTEM_STATE;
+
+        SYSTEM_STATE.battery_voltage_x10 = 118 + ((tick * 7) % 10) as u8;
+
+        let base_rpm = 800 + (tick % 600);
+        let variation = ((tick * 37) % 200) as i16 - 100;
+        SYSTEM_STATE.engine_rpm = (base_rpm as i16 + variation) as u16;
+
+        SYSTEM_STATE.vehicle_speed = ((tick * 13) % 180) as u16;
+        SYSTEM_STATE.coolant_temp = 75 + ((tick * 3) % 35) as u8;
+        SYSTEM_STATE.intake_air_temp = 20 + ((tick * 5) % 25) as u8;
+        SYSTEM_STATE.throttle_position = ((tick * 17) % 100) as u8;
+        SYSTEM_STATE.obd_cycle_counter = (tick / 60) as u16;
+    }
+}
+
+fn get_trend_indicator<T: PartialEq + PartialOrd>(current: T, old: T) -> &'static str {
+    if current > old {
+        "▲"
+    } else if current < old {
+        "▼"
+    } else {
+        "─"
+    }
+}
+
 struct App {
     manager: EventManager,
     selected_event: usize,
@@ -111,7 +183,6 @@ struct App {
     selected_ff: Option<usize>,
     editing_calib: bool,
     editing_field: usize,
-    timestamp: u32,
     last_action: String,
     input_buffer: String,
     ff_scroll: usize,
@@ -254,6 +325,7 @@ impl App {
             },
             state: EventManagerState::Off,
             freeze_frames_lock: Mutex::new(()),
+            timestamp: unsafe { &mut *addr_of_mut!(TIMESTAMP) },
         };
 
         Self {
@@ -263,7 +335,6 @@ impl App {
             selected_ff: None,
             editing_calib: false,
             editing_field: 0,
-            timestamp: 0,
             last_action: "Ready".to_string(),
             input_buffer: String::new(),
             ff_scroll: 0,
@@ -283,10 +354,26 @@ impl App {
         }
 
         unsafe {
-            SNAPSHOT_DATA[0] = (self.timestamp & 0xFF) as u8;
-            SNAPSHOT_DATA[1] = ((self.timestamp >> 8) & 0xFF) as u8;
-            SNAPSHOT_DATA[2] = ((self.timestamp >> 16) & 0xFF) as u8;
-            SNAPSHOT_DATA[3] = ((self.timestamp >> 24) & 0xFF) as u8;
+            let state = &raw const SYSTEM_STATE;
+            let state = &*state;
+            SNAPSHOT_DATA[0] = state.battery_voltage_x10;
+            SNAPSHOT_DATA[1] = state.engine_rpm as u8;
+            SNAPSHOT_DATA[2] = (state.engine_rpm >> 8) as u8;
+            SNAPSHOT_DATA[3] = state.vehicle_speed as u8;
+            SNAPSHOT_DATA[4] = (state.vehicle_speed >> 8) as u8;
+            SNAPSHOT_DATA[5] = state.coolant_temp;
+            SNAPSHOT_DATA[6] = state.intake_air_temp;
+            SNAPSHOT_DATA[7] = state.throttle_position;
+            SNAPSHOT_DATA[8] = state.obd_cycle_counter as u8;
+            SNAPSHOT_DATA[9] = (state.obd_cycle_counter >> 8) as u8;
+            SNAPSHOT_DATA[10] = match status {
+                Status::Failed | Status::PreFailed => 0x02,
+                _ => 0x01,
+            };
+
+            for i in 11..255 {
+                SNAPSHOT_DATA[i] = 0;
+            }
         }
 
         let event_name = format!("Event{}", event_id);
@@ -297,12 +384,8 @@ impl App {
             Status::Passed => "Passed",
         };
 
-        match self
-            .manager
-            .step(event_id as EventId, status, true, 0.01, self.timestamp)
-        {
+        match self.manager.step(event_id as EventId, status, true, 0.01) {
             Ok(_) => {
-                self.timestamp += 1;
                 self.last_action = format!("Stepped {} with {}", event_name, status_name);
             }
             Err(e) => {
@@ -313,7 +396,6 @@ impl App {
 
     fn init_cycle(&mut self) {
         self.manager.init();
-        self.timestamp = 0;
         self.last_action = "Cycle initialized".to_string();
     }
 
@@ -326,13 +408,11 @@ impl App {
         self.manager.stop();
         self.manager.init();
         self.current_cycle += 1;
-        self.timestamp = 0;
         self.last_action = format!("Advanced to cycle {}", self.current_cycle);
     }
 
     fn clear_all(&mut self) {
         self.manager.clear();
-        self.timestamp = 0;
         self.last_action = "All events cleared".to_string();
     }
 
@@ -496,12 +576,145 @@ fn render_body(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
     } else {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
+            .constraints([
+                Constraint::Percentage(20),
+                Constraint::Percentage(45),
+                Constraint::Percentage(35),
+            ])
             .split(area);
 
         render_event_list(f, app, chunks[0]);
         render_event_details(f, app, chunks[1]);
+        render_live_system_state(f, app, chunks[2]);
     }
+}
+
+fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) {
+    let state = unsafe { &*(&raw const SYSTEM_STATE) };
+    let old_state = unsafe { &*(&raw const SYSTEM_STATE_OLD) };
+
+    let lines = vec![
+        Line::from(vec![
+            Span::raw("  Battery Voltage: "),
+            Span::raw(format!("{:>5.1}V", state.battery_voltage_x10 as f32 / 10.0)),
+            Span::raw("  ").fg(theme::MUTED),
+            Span::raw(get_trend_indicator(
+                state.battery_voltage_x10,
+                old_state.battery_voltage_x10,
+            ))
+            .fg(
+                if state.battery_voltage_x10 > old_state.battery_voltage_x10 {
+                    theme::GREEN
+                } else if state.battery_voltage_x10 < old_state.battery_voltage_x10 {
+                    theme::RED
+                } else {
+                    theme::MUTED
+                },
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("  Engine RPM:     "),
+            Span::raw(format!("{:>6}", state.engine_rpm)),
+            Span::raw(" rpm ").fg(theme::MUTED),
+            Span::raw(get_trend_indicator(state.engine_rpm, old_state.engine_rpm)).fg(
+                if state.engine_rpm > old_state.engine_rpm {
+                    theme::GREEN
+                } else if state.engine_rpm < old_state.engine_rpm {
+                    theme::RED
+                } else {
+                    theme::MUTED
+                },
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("  Vehicle Speed:  "),
+            Span::raw(format!("{:>6}", state.vehicle_speed)),
+            Span::raw(" km/h ").fg(theme::MUTED),
+            Span::raw(get_trend_indicator(
+                state.vehicle_speed,
+                old_state.vehicle_speed,
+            ))
+            .fg(if state.vehicle_speed > old_state.vehicle_speed {
+                theme::YELLOW
+            } else if state.vehicle_speed < old_state.vehicle_speed {
+                theme::GREEN
+            } else {
+                theme::MUTED
+            }),
+        ]),
+        Line::from(vec![
+            Span::raw("  Coolant Temp:  "),
+            Span::raw(format!("{:>6}°C", state.coolant_temp)),
+            Span::raw("   ").fg(theme::MUTED),
+            Span::raw(get_trend_indicator(
+                state.coolant_temp,
+                old_state.coolant_temp,
+            ))
+            .fg(if state.coolant_temp > old_state.coolant_temp {
+                theme::RED
+            } else if state.coolant_temp < old_state.coolant_temp {
+                theme::BLUE
+            } else {
+                theme::MUTED
+            }),
+        ]),
+        Line::from(vec![
+            Span::raw("  Intake Air:    "),
+            Span::raw(format!("{:>6}°C", state.intake_air_temp)),
+            Span::raw("   ").fg(theme::MUTED),
+            Span::raw(get_trend_indicator(
+                state.intake_air_temp,
+                old_state.intake_air_temp,
+            ))
+            .fg(theme::MUTED),
+        ]),
+        Line::from(vec![
+            Span::raw("  Throttle:     "),
+            Span::raw(format!("{:>6}%", state.throttle_position)),
+            Span::raw("  ").fg(theme::MUTED),
+            Span::raw(get_trend_indicator(
+                state.throttle_position,
+                old_state.throttle_position,
+            ))
+            .fg(if state.throttle_position > old_state.throttle_position {
+                theme::YELLOW
+            } else if state.throttle_position < old_state.throttle_position {
+                theme::GREEN
+            } else {
+                theme::MUTED
+            }),
+        ]),
+        Line::from(vec![
+            Span::raw("  OBD Cycle:    "),
+            Span::raw(format!("{}", state.obd_cycle_counter)),
+        ]),
+        Line::from(vec![
+            Span::raw("  System Mode:  "),
+            Span::raw(match state.system_mode {
+                0x01 => "Normal       ",
+                0x02 => "Fault Active ",
+                0x03 => "Fault Healed ",
+                _ => "Unknown      ",
+            })
+            .fg(match state.system_mode {
+                0x01 => theme::GREEN,
+                0x02 => theme::RED,
+                0x03 => theme::YELLOW,
+                _ => theme::MUTED,
+            }),
+        ]),
+    ];
+
+    f.render_widget(
+        Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme::MUTED))
+                .title_style(Style::default().fg(theme::CYAN))
+                .title(" System State (Live) "),
+        ),
+        area,
+    );
 }
 
 fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
@@ -872,7 +1085,7 @@ fn render_footer(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
         Span::raw("[").fg(theme::MUTED),
         Span::raw(status).fg(status_color).bold(),
         Span::raw("] ").fg(theme::MUTED),
-        Span::raw(format!("Timestamp: {:04}  ", app.timestamp)),
+        Span::raw(format!("Timestamp: {:04}  ", *app.manager.timestamp)),
         Span::raw("| Last: ").fg(theme::MUTED),
         Span::raw(&app.last_action),
         Span::raw(" | ").fg(theme::MUTED),
@@ -1082,37 +1295,55 @@ fn render_help_overlay(f: &mut ratatui::Frame<'_>, app: &App) {
 
 fn main() -> Result<(), io::Error> {
     let mut app = App::new();
+    let mut last_tick = Instant::now();
 
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
+    enable_raw_mode()?;
+    execute!(io::stdout(), EnterAlternateScreen)?;
     terminal.clear()?;
 
     loop {
+        if app.manager.state == EventManagerState::On {
+            if last_tick.elapsed() >= Duration::from_secs(1) {
+                *app.manager.timestamp += 1;
+                unsafe {
+                    SIMULATION_TICK += 1;
+                    update_live_system_state(SIMULATION_TICK);
+                }
+                last_tick = Instant::now();
+            }
+        }
+
         terminal.draw(|f| {
             render_ui(f, &app);
             render_help_overlay(f, &app);
         })?;
 
-        if crossterm::event::poll(std::time::Duration::from_millis(100))? {
-            if let crossterm::event::Event::Key(key) = crossterm::event::read()? {
-                if app.show_help {
-                    app.show_help = false;
-                    continue;
-                }
-
-                if app.editing_calib {
-                    handle_calib_edit_input(&mut app, key);
-                } else {
-                    if !handle_key_event(&mut app, key) {
+        if crossterm::event::poll(Duration::from_millis(100))? {
+            match crossterm::event::read()? {
+                crossterm::event::Event::Key(key) => {
+                    if app.show_help {
+                        app.show_help = false;
+                    } else if app.editing_calib {
+                        handle_calib_edit_input(&mut app, key);
+                    } else if !handle_key_event(&mut app, key) {
                         break;
                     }
                 }
+                crossterm::event::Event::Mouse(_) => {}
+                crossterm::event::Event::Resize(_, _) => {}
+                crossterm::event::Event::Paste(_)
+                | crossterm::event::Event::FocusGained
+                | crossterm::event::Event::FocusLost => {}
             }
         }
     }
 
+    execute!(io::stdout(), LeaveAlternateScreen)?;
+    disable_raw_mode()?;
     terminal.clear()?;
     println!("Goodbye!");
     Ok(())
