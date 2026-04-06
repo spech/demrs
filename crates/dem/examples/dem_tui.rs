@@ -1381,6 +1381,11 @@ fn render_uds_status_panel(f: &mut ratatui::Frame<'_>, status: dem::UdsStatusByt
             Cell::from(Span::raw("NC This OC")),
             flag_cell(status.tnctoc()),
         ]),
+        Row::new(vec![
+            Cell::from(Span::raw("WIR")),
+            Cell::from(Span::raw("Warn Indicator")),
+            flag_cell(status.wir()),
+        ]),
     ];
 
     let table = Table::new(

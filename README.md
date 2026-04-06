@@ -63,7 +63,7 @@ The UDS status byte tracks DTC state across 7 bits:
 | 4   | Test Not Complete Since Last Clear (tncslc) | Not-complete status since last clear                                   |
 | 5   | Test Failed Since Last Clear (tfslc)     | Failure occurred since last clear                                          |
 | 6   | Test Not Complete This Op. Cycle (tnctoc) | Not-complete flag (`true` = event not yet confirmed)                    |
-| 7   | Reserved                                  | Unused bit                                                               |
+| 7   | Warning Indicator Requested (wir)         | Warning indicator (MIL) activation flag                                  |
 
 ## Crates
 
