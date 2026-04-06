@@ -111,7 +111,8 @@ impl EventManager {
             }
 
             if !new_status.wir() && self.events[index].uds_status_old.wir() {
-                self.indicator_lamps.update_all(&self.events[index].cal_config.lamp_behaviors, false);
+                self.indicator_lamps
+                    .update_all(&self.events[index].cal_config.lamp_behaviors, false);
             }
         }
     }
@@ -263,5 +264,14 @@ impl EventManager {
     /// `true` if the lamp is on, `false` otherwise.
     pub fn is_lamp_on(&self, lamp_id: LampId) -> bool {
         self.indicator_lamps.is_on(lamp_id)
+    }
+
+    /// Returns the current behavior of the specified lamp.
+    ///
+    /// # Arguments
+    ///
+    /// * `lamp_id` - The lamp type (Mil, Rsl, Awl, Pl)
+    pub fn get_lamp_behavior(&self, lamp_id: LampId) -> crate::indicator::LampBehavior {
+        self.indicator_lamps.get_behavior(lamp_id)
     }
 }

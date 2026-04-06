@@ -256,6 +256,11 @@ impl IndicatorLamps {
     pub fn is_on(&self, lamp_id: LampId) -> bool {
         self.lamps[lamp_id.to_index()].state
     }
+
+    /// Gets lamp behavior by LampId.
+    pub fn get_behavior(&self, lamp_id: LampId) -> LampBehavior {
+        self.lamps[lamp_id.to_index()].behavior
+    }
 }
 
 #[cfg(test)]
@@ -514,5 +519,30 @@ mod tests {
         assert_eq!(lamps.lamps[1].behavior, LampBehavior::Off);
         assert_eq!(lamps.lamps[2].behavior, LampBehavior::Off);
         assert_eq!(lamps.lamps[3].behavior, LampBehavior::Off);
+    }
+
+    #[test]
+    fn fn_get_behavior_returns_correct_behavior() {
+        let mut lamps = IndicatorLamps::default();
+        let behaviors = [
+            LampBehavior::On,
+            LampBehavior::FastBlink,
+            LampBehavior::SlowBlink,
+            LampBehavior::ShortFlash,
+        ];
+
+        lamps.update_all(&behaviors, true);
+
+        assert_eq!(lamps.get_behavior(LampId::Mil), LampBehavior::On);
+        assert_eq!(lamps.get_behavior(LampId::Rsl), LampBehavior::FastBlink);
+        assert_eq!(lamps.get_behavior(LampId::Awl), LampBehavior::SlowBlink);
+        assert_eq!(lamps.get_behavior(LampId::Pl), LampBehavior::ShortFlash);
+
+        lamps.clear_all();
+
+        assert_eq!(lamps.get_behavior(LampId::Mil), LampBehavior::Off);
+        assert_eq!(lamps.get_behavior(LampId::Rsl), LampBehavior::Off);
+        assert_eq!(lamps.get_behavior(LampId::Awl), LampBehavior::Off);
+        assert_eq!(lamps.get_behavior(LampId::Pl), LampBehavior::Off);
     }
 }
