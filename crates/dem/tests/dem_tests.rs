@@ -1,6 +1,7 @@
 use dem::{
-    f_25_events::EVENT_MANAGER, EventManager, EventManagerState, FreezeFrameList, SnapshotConfig,
-    SnapshotSource, Status,
+    f_25_events::EVENT_MANAGER, CalibConfig, DebounceBehavior, DebounceType, EventManager,
+    EventManagerState, FreezeFrameList, LampBehavior, LampId, NvmConfig, SaveTrigger,
+    SnapshotConfig, SnapshotSource, Status,
 };
 use serial_test::serial;
 
@@ -39,10 +40,17 @@ fn bdd_freeze_frame_list_full_eviction() {
         debounce_behavior: dem::DebounceBehavior::Freeze,
         debounce_type: dem::DebounceType::CounterBased,
         confirmation_threshold: 1,
-        aging_threshold: 1,
+        healing_threshold: 1,
+        aging_threshold: 4,
         priority: 10,
         save_trigger: dem::SaveTrigger::OnPdtc,
         record_update: true,
+        lamp_behaviors: [
+            dem::LampBehavior::Off,
+            dem::LampBehavior::Off,
+            dem::LampBehavior::Off,
+            dem::LampBehavior::Off,
+        ],
     };
 
     let mut events = Vec::new();
@@ -53,6 +61,7 @@ fn bdd_freeze_frame_list_full_eviction() {
         let nvm_config = Box::leak(Box::new(dem::NvmConfig {
             uds_status: uds,
             occurence_cntr: 0,
+            healing_cycles: 0,
             aging_cycles: 0,
             confirmation_cycles: 0,
         }));
@@ -81,6 +90,7 @@ fn bdd_freeze_frame_list_full_eviction() {
     };
 
     static mut TEST_TIMESTAMP: u32 = 0;
+    static mut INDICATOR_LAMPS_NVM: dem::IndicatorLamps = dem::IndicatorLamps::new();
 
     let mut manager = EventManager {
         events,
@@ -89,6 +99,7 @@ fn bdd_freeze_frame_list_full_eviction() {
         state: EventManagerState::Off,
         freeze_frames_lock: spin::Mutex::new(()),
         timestamp: unsafe { &mut *(&raw mut TEST_TIMESTAMP) },
+        indicator_lamps: unsafe { &mut *(&raw mut INDICATOR_LAMPS_NVM) },
     };
 
     manager.init();
@@ -124,16 +135,23 @@ fn bdd_freeze_frame_list_full_eviction() {
 #[test]
 #[serial]
 fn bdd_freeze_frame_list_full_reject_lower_priority() {
-    let cal_config_template = dem::CalibConfig {
+    let cal_config_template = CalibConfig {
         step_up: 1,
         step_down: 0,
-        debounce_behavior: dem::DebounceBehavior::Freeze,
-        debounce_type: dem::DebounceType::CounterBased,
+        debounce_behavior: DebounceBehavior::Freeze,
+        debounce_type: DebounceType::CounterBased,
         confirmation_threshold: 1,
-        aging_threshold: 1,
+        healing_threshold: 1,
+        aging_threshold: 4,
         priority: 24,
-        save_trigger: dem::SaveTrigger::OnPdtc,
+        save_trigger: SaveTrigger::OnPdtc,
         record_update: true,
+        lamp_behaviors: [
+            LampBehavior::Off,
+            LampBehavior::Off,
+            LampBehavior::Off,
+            LampBehavior::Off,
+        ],
     };
 
     let mut events = Vec::new();
@@ -141,9 +159,10 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         let mut uds = dem::UdsStatusByte::from_raw(0);
         uds.set_tnctoc(true);
 
-        let nvm_config = Box::leak(Box::new(dem::NvmConfig {
+        let nvm_config = Box::leak(Box::new(NvmConfig {
             uds_status: uds,
             occurence_cntr: 0,
+            healing_cycles: 0,
             aging_cycles: 0,
             confirmation_cycles: 0,
         }));
@@ -172,6 +191,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
     };
 
     static mut TEST_TIMESTAMP: u32 = 0;
+    static mut INDICATOR_LAMPS_NVM: dem::IndicatorLamps = dem::IndicatorLamps::new();
 
     let mut manager = EventManager {
         events,
@@ -180,6 +200,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         state: EventManagerState::Off,
         freeze_frames_lock: spin::Mutex::new(()),
         timestamp: unsafe { &mut *(&raw mut TEST_TIMESTAMP) },
+        indicator_lamps: unsafe { &mut *(&raw mut INDICATOR_LAMPS_NVM) },
     };
 
     manager.init();
@@ -263,7 +284,10 @@ fn bdd_freeze_frame_list_oncdtc_trigger() {
     *manager.timestamp = 0;
     manager.step(0, Status::Failed, true, 0.0).unwrap();
     assert!(manager.freeze_frames.get_by_event_id(0).is_none());
-
+    manager.handler_10ms();
+    for lamp_id in [LampId::Mil, LampId::Rsl, LampId::Awl, LampId::Pl] {
+        assert!(!manager.is_lamp_on(lamp_id));
+    }
     manager.stop();
     manager.init();
 
@@ -271,27 +295,31 @@ fn bdd_freeze_frame_list_oncdtc_trigger() {
     let status = manager.step(0, Status::Failed, true, 0.0).unwrap();
     assert!(status.cdtc());
     assert!(manager.freeze_frames.get_by_event_id(0).is_some());
+    manager.handler_10ms();
+    for lamp_id in [LampId::Mil, LampId::Rsl, LampId::Awl, LampId::Pl] {
+        assert!(manager.is_lamp_on(lamp_id));
+    }
 }
 
-/// Tests that aged events are removed from freeze frames when aging completes.
+/// Tests that healed events are removed from freeze frames when healing completes.
 ///
-/// **Use Case**: After a confirmed DTC passes through the aging process (operating
-/// cycles where the test passes), it should be aged out and removed from storage.
+/// **Use Case**: After a confirmed DTC passes through the healing process (operating
+/// cycles where the test passes), it should be healed out and removed from storage.
 /// This prevents storage from filling with historical resolved faults and ensures
 /// only recent/relevant faults remain in the system.
 ///
-/// **Setup**: Uses fixture event 12 which has save_trigger = OnCdtc, aging_threshold = 10
+/// **Setup**: Uses fixture event 12 which has save_trigger = OnCdtc, healing_threshold = 10
 ///
 /// **Flow**:
 /// 1. First occurrence: pdtc rises, stop/init cycle sets cdtc, record created
-/// 2. Aging cycles: Test passes for 10+ operating cycles
+/// 2. Healing cycles: Test passes for 10+ operating cycles
 /// 3. After threshold: stop() clears cdtc, triggering removal from freeze frames
 ///
-/// **Aging Requirements** (all must be true in stop()):
+/// **Healing Requirements** (all must be true in stop()):
 /// - tftoc must be false (test not failed this cycle)
 /// - tnctoc must be false (test complete this cycle)
 /// - cdtc must be true (still confirmed)
-/// - aging_cycles must reach aging_threshold
+/// - healing_cycles must reach healing_threshold
 #[test]
 #[serial]
 fn bdd_freeze_frame_list_remove_aged_event() {
@@ -316,21 +344,27 @@ fn bdd_freeze_frame_list_remove_aged_event() {
     assert!(status.cdtc());
     assert!(manager.freeze_frames.get_by_event_id(12).is_some());
 
-    manager.events[12].nv_config.aging_cycles = 0;
+    manager.events[12].nv_config.healing_cycles = 0;
     manager.events[12].nv_config.uds_status = dem::UdsStatusByte::from_raw(0);
-    manager.events[12].nv_config.uds_status.set_tftoc(true);
-    manager.events[12].nv_config.uds_status.set_cdtc(true);
+    manager.events[12].nv_config.uds_status.set_cdtc(true); // set all wir
 
-    for _ in 0..11 {
-        manager.events[12].nv_config.uds_status.set_tftoc(false);
-        manager.events[12].nv_config.uds_status.set_tnctoc(false);
+    for _ in 0..manager.events[12].cal_config.healing_threshold + 1 {
         manager.step(12, Status::Passed, true, 0.0).unwrap();
         manager.stop();
         manager.init();
     }
 
-    manager.events[12].nv_config.uds_status.set_tftoc(false);
-    manager.events[12].nv_config.uds_status.set_tnctoc(false);
+    assert_eq!(manager.events[12].nv_config.uds_status.wir(), false);
+    assert_eq!(manager.events[12].nv_config.uds_status.cdtc(), true);
+    assert!(manager.freeze_frames.get_by_event_id(12).is_some());
+
+    for _ in 0..manager.events[12].cal_config.aging_threshold {
+        manager.step(12, Status::Passed, true, 0.0).unwrap();
+        manager.stop();
+        manager.init();
+    }
+
+    manager.step(12, Status::Passed, true, 0.0).unwrap();
     manager.stop();
 
     assert!(manager.freeze_frames.get_by_event_id(12).is_none());

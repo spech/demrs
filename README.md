@@ -18,7 +18,7 @@ information, including:
 
 - **DTCs (Diagnostic Trouble Codes)** - Identifiers for specific fault conditions
 - **Debouncing** - Filtering transient signals before confirming a fault
-- **Status Tracking** - Monitoring DTC lifecycle (pending, confirmed, aging)
+- **Status Tracking** - Monitoring DTC lifecycle (pending, confirmed, healing)
 
 ### Debouncing Concepts
 
@@ -63,7 +63,7 @@ The UDS status byte tracks DTC state across 7 bits:
 | 4   | Test Not Complete Since Last Clear (tncslc) | Not-complete status since last clear                                   |
 | 5   | Test Failed Since Last Clear (tfslc)     | Failure occurred since last clear                                          |
 | 6   | Test Not Complete This Op. Cycle (tnctoc) | Not-complete flag (`true` = event not yet confirmed)                    |
-| 7   | Reserved                                  | Unused bit                                                               |
+| 7   | Warning Indicator Requested (wir)         | Warning indicator (MIL) activation flag                                  |
 
 ## Crates
 
@@ -84,6 +84,34 @@ Key components:
 - [`FreezeFrameList`] - Fixed-capacity (24) list of FreezeFrame entries, priority-ordered
 - [`EventManager`] - Manages a collection of Events and their FreezeFrame data
 - [`EventManagerError`] - Error types for EventManager operations
+- [`IndicatorLamp`] - Lamp control with blink pattern management
+- [`LampBehavior`] - Lamp behavior modes (Off, FastBlink, SlowBlink, ShortFlash, On)
+- [`LampId`] - Lamp type identifiers (Mil, Rsl, Awl, Pl)
+
+### Indicator Lamps
+
+The indicator lamp module provides J1939-compliant lamp control for vehicle dashboards.
+
+**Lamp Types:**
+| Type | Description |
+|------|-------------|
+| `Mil` | Malfunction Indicator Lamp |
+| `Rsl` | Red Stop Lamp |
+| `Awl` | Amber Warning Lamp |
+| `Pl` | Protect Lamp |
+
+**Lamp Behaviors (priority order):**
+| Priority | Behavior | Description |
+|---------|----------|-------------|
+| Highest | `On` | Continuous illumination |
+| 2 | `ShortFlash` | 3 flashes at 2Hz, then 1500ms pause |
+| 3 | `SlowBlink` | 1 Hz blink |
+| Lowest | `FastBlink` | 2 Hz blink |
+
+**Features:**
+- Counter-based behavior selection (highest counter wins)
+- Automatic blink pattern generation via `handler_10ms()`
+- Tick-based timing at 10ms intervals
 
 ### confirmator
 

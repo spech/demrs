@@ -65,161 +65,187 @@ mod theme {
 
 use dem::{
     CalibConfig, DebounceBehavior, DebounceType, Event, EventId, EventManager, EventManagerState,
-    FreezeFrame, FreezeFrameList, NvmConfig, SaveTrigger, SnapshotConfig, SnapshotSource, Status,
-    UdsStatusByte,
+    FreezeFrame, FreezeFrameList, IndicatorLamps, LampBehavior, LampId, NvmConfig, SaveTrigger,
+    SnapshotConfig, SnapshotSource, Status, UdsStatusByte,
 };
 use spin::Mutex;
 
 static mut FF_LIST_NVM: [Option<FreezeFrame>; 24] = [const { None }; 24];
+static mut INDICATOR_LAMPS_NVM: IndicatorLamps = IndicatorLamps::new();
 
 static mut EVENT_NVM: [NvmConfig; 25] = [
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
+        healing_cycles: 0,
         aging_cycles: 0,
         confirmation_cycles: 0,
     },
@@ -358,10 +384,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 3,
+                healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 1,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 3,
@@ -369,10 +402,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 5,
+                healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 2,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 5,
@@ -380,10 +420,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 3,
+                healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 3,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: false,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 10,
@@ -391,10 +438,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Reset,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 10,
+                healing_threshold: 10,
+                aging_threshold: 4,
                 priority: 4,
                 save_trigger: SaveTrigger::OnTftoc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -402,10 +456,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 3,
+                healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 5,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 25,
@@ -413,10 +474,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
-                aging_threshold: 5,
+                healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 6,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -424,10 +492,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 3,
+                healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 7,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 3,
@@ -435,10 +510,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 5,
+                healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 8,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -446,10 +528,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 3,
+                healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 9,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 2,
@@ -457,10 +546,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
+                healing_threshold: 4,
                 aging_threshold: 4,
                 priority: 10,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 4,
@@ -468,10 +564,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 6,
+                healing_threshold: 6,
+                aging_threshold: 4,
                 priority: 11,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 6,
@@ -479,10 +582,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Reset,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 7,
+                healing_threshold: 7,
+                aging_threshold: 4,
                 priority: 12,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: false,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -490,10 +600,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 3,
+                healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 13,
                 save_trigger: SaveTrigger::OnTftoc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 8,
@@ -501,10 +618,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
-                aging_threshold: 8,
+                healing_threshold: 8,
+                aging_threshold: 4,
                 priority: 14,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 3,
@@ -512,10 +636,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
+                healing_threshold: 4,
                 aging_threshold: 4,
                 priority: 15,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 5,
@@ -523,10 +654,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 6,
+                healing_threshold: 6,
+                aging_threshold: 4,
                 priority: 16,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 2,
@@ -534,10 +672,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Reset,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 5,
+                healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 17,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: false,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -545,10 +690,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
-                aging_threshold: 3,
+                healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 18,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 7,
@@ -556,10 +708,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 9,
+                healing_threshold: 9,
+                aging_threshold: 4,
                 priority: 19,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 4,
@@ -567,10 +726,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 5,
+                healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 20,
                 save_trigger: SaveTrigger::OnTftoc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -578,10 +744,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
+                healing_threshold: 4,
                 aging_threshold: 4,
                 priority: 21,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 9,
@@ -589,10 +762,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Reset,
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
-                aging_threshold: 10,
+                healing_threshold: 10,
+                aging_threshold: 4,
                 priority: 22,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 2,
@@ -600,10 +780,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
-                aging_threshold: 6,
+                healing_threshold: 6,
+                aging_threshold: 4,
                 priority: 23,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: false,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 3,
@@ -611,10 +798,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
+                healing_threshold: 4,
                 aging_threshold: 4,
                 priority: 24,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -622,10 +816,17 @@ impl App {
                 debounce_behavior: DebounceBehavior::Freeze,
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
-                aging_threshold: 3,
+                healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 25,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
         ];
 
@@ -658,6 +859,7 @@ impl App {
             state: EventManagerState::Off,
             freeze_frames_lock: Mutex::new(()),
             timestamp: unsafe { &mut *addr_of_mut!(TIMESTAMP) },
+            indicator_lamps: unsafe { &mut *addr_of_mut!(INDICATOR_LAMPS_NVM) },
         };
 
         Self {
@@ -765,11 +967,26 @@ impl App {
             2 => "debounce_type",
             3 => "debounce_behavior",
             4 => "confirmation_threshold",
-            5 => "aging_threshold",
-            6 => "priority",
-            7 => "save_trigger",
-            8 => "record_update",
+            5 => "healing_threshold",
+            6 => "aging_threshold",
+            7 => "priority",
+            8 => "save_trigger",
+            9 => "record_update",
+            10 => "Lamp MIL",
+            11 => "Lamp RSL",
+            12 => "Lamp AWL",
+            13 => "Lamp PL",
             _ => "",
+        }
+    }
+
+    fn next_lamp_behavior(current: LampBehavior) -> LampBehavior {
+        match current {
+            LampBehavior::Off => LampBehavior::FastBlink,
+            LampBehavior::FastBlink => LampBehavior::SlowBlink,
+            LampBehavior::SlowBlink => LampBehavior::ShortFlash,
+            LampBehavior::ShortFlash => LampBehavior::On,
+            LampBehavior::On => LampBehavior::Off,
         }
     }
 
@@ -826,6 +1043,15 @@ impl App {
             }
             5 => {
                 let new_val = if increment {
+                    event.cal_config.healing_threshold.saturating_add(1)
+                } else {
+                    event.cal_config.healing_threshold.saturating_sub(1)
+                };
+                event.cal_config.healing_threshold = new_val;
+                self.last_action = format!("healing_threshold: {}", new_val);
+            }
+            6 => {
+                let new_val = if increment {
                     event.cal_config.aging_threshold.saturating_add(1)
                 } else {
                     event.cal_config.aging_threshold.saturating_sub(1)
@@ -833,7 +1059,7 @@ impl App {
                 event.cal_config.aging_threshold = new_val;
                 self.last_action = format!("aging_threshold: {}", new_val);
             }
-            6 => {
+            7 => {
                 let new_val = if increment {
                     event.cal_config.priority.saturating_add(1).min(255)
                 } else {
@@ -842,7 +1068,7 @@ impl App {
                 event.cal_config.priority = new_val;
                 self.last_action = format!("priority: {}", new_val);
             }
-            7 => {
+            8 => {
                 event.cal_config.save_trigger = match event.cal_config.save_trigger {
                     SaveTrigger::OnPdtc => SaveTrigger::OnCdtc,
                     SaveTrigger::OnCdtc => SaveTrigger::OnTf,
@@ -851,9 +1077,29 @@ impl App {
                 };
                 self.last_action = format!("save_trigger: {:?}", event.cal_config.save_trigger);
             }
-            8 => {
+            9 => {
                 event.cal_config.record_update = !event.cal_config.record_update;
                 self.last_action = format!("record_update: {}", event.cal_config.record_update);
+            }
+            10 => {
+                event.cal_config.lamp_behaviors[0] =
+                    Self::next_lamp_behavior(event.cal_config.lamp_behaviors[0]);
+                self.last_action = format!("Lamp MIL: {:?}", event.cal_config.lamp_behaviors[0]);
+            }
+            11 => {
+                event.cal_config.lamp_behaviors[1] =
+                    Self::next_lamp_behavior(event.cal_config.lamp_behaviors[1]);
+                self.last_action = format!("Lamp RSL: {:?}", event.cal_config.lamp_behaviors[1]);
+            }
+            12 => {
+                event.cal_config.lamp_behaviors[2] =
+                    Self::next_lamp_behavior(event.cal_config.lamp_behaviors[2]);
+                self.last_action = format!("Lamp AWL: {:?}", event.cal_config.lamp_behaviors[2]);
+            }
+            13 => {
+                event.cal_config.lamp_behaviors[3] =
+                    Self::next_lamp_behavior(event.cal_config.lamp_behaviors[3]);
+                self.last_action = format!("Lamp PL: {:?}", event.cal_config.lamp_behaviors[3]);
             }
             _ => {}
         }
@@ -867,10 +1113,14 @@ impl App {
             2 => format!("{:?}", event.cal_config.debounce_type),
             3 => format!("{:?}", event.cal_config.debounce_behavior),
             4 => format!("{}", event.cal_config.confirmation_threshold),
-            5 => format!("{}", event.cal_config.aging_threshold),
+            5 => format!("{}", event.cal_config.healing_threshold),
             6 => format!("{}", event.cal_config.priority),
             7 => format!("{:?}", event.cal_config.save_trigger),
             8 => format!("{}", event.cal_config.record_update),
+            10 => format!("{:?}", event.cal_config.lamp_behaviors[0]),
+            11 => format!("{:?}", event.cal_config.lamp_behaviors[1]),
+            12 => format!("{:?}", event.cal_config.lamp_behaviors[2]),
+            13 => format!("{:?}", event.cal_config.lamp_behaviors[3]),
             _ => String::new(),
         }
     }
@@ -952,7 +1202,14 @@ fn render_body(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
 
         render_event_list(f, app, chunks[0]);
         render_event_details_wrapper(f, app, chunks[1]);
-        render_live_system_state(f, app, chunks[2]);
+
+        let system_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
+            .split(chunks[2]);
+
+        render_live_system_state(f, app, system_chunks[0]);
+        render_lamp_status(f, app, system_chunks[1]);
     }
 }
 
@@ -1154,6 +1411,46 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
     f.render_widget(table, area);
 }
 
+fn render_lamp_status(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
+    let behavior_str = |behavior: LampBehavior| -> &'static str {
+        match behavior {
+            LampBehavior::Off => "Off",
+            LampBehavior::FastBlink => "Fast",
+            LampBehavior::SlowBlink => "Slow",
+            LampBehavior::ShortFlash => "Flash",
+            LampBehavior::On => "On",
+        }
+    };
+
+    let make_lamp_line =
+        |lamp_id: LampId, color: ratatui::style::Color, name: &str| -> Line<'static> {
+            let is_on = app.manager.is_lamp_on(lamp_id);
+            let behavior = app.manager.get_lamp_behavior(lamp_id);
+            let sphere = if is_on { "●" } else { "○" };
+            let text_color = if is_on { color } else { theme::MUTED };
+            Line::from(vec![
+                Span::raw(format!("{} ", sphere)).bold().fg(text_color),
+                Span::raw(format!("{} ({})", name, behavior_str(behavior))).fg(text_color),
+            ])
+        };
+
+    let paragraph = Paragraph::new(vec![
+        make_lamp_line(LampId::Mil, theme::MAGENTA, "MALFUNCTION INDICATOR LAMP"),
+        make_lamp_line(LampId::Rsl, theme::RED, "RED STOP LAMP"),
+        make_lamp_line(LampId::Awl, theme::ORANGE, "AMBER WARNING LAMP"),
+        make_lamp_line(LampId::Pl, theme::BLUE, "PROTECT LAMP"),
+    ])
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::CYAN))
+            .title_style(Style::default().fg(theme::CYAN))
+            .title(" Lamp Status "),
+    );
+
+    f.render_widget(paragraph, area);
+}
+
 fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
     let rows: Vec<Row> = app
         .manager
@@ -1165,14 +1462,15 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
             let name = EVENT_NAMES.get(i).unwrap_or(&"Unknown");
             let counter = event.debounce_counter();
 
-            let (t_flag, f_flag, p_flag, c_flag) = (
+            let (t_flag, f_flag, p_flag, c_flag, w_flag) = (
                 if status.tf() { "T" } else { "-" },
                 if status.tftoc() { "F" } else { "-" },
                 if status.pdtc() { "P" } else { "-" },
                 if status.cdtc() { "C" } else { "-" },
+                if status.wir() { "W" } else { "-" },
             );
 
-            let (t_color, f_color, p_color, c_color) = (
+            let (t_color, f_color, p_color, c_color, w_color) = (
                 if status.tf() {
                     theme::RED
                 } else {
@@ -1189,6 +1487,11 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
                     theme::MUTED
                 },
                 if status.cdtc() {
+                    theme::RED
+                } else {
+                    theme::MUTED
+                },
+                if status.wir() {
                     theme::RED
                 } else {
                     theme::MUTED
@@ -1217,6 +1520,7 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
                 Cell::from(Span::raw(f_flag).fg(f_color)),
                 Cell::from(Span::raw(p_flag).fg(p_color)),
                 Cell::from(Span::raw(c_flag).fg(c_color)),
+                Cell::from(Span::raw(w_flag).fg(w_color)),
             ])
             .style(row_style)
         })
@@ -1232,6 +1536,7 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
             Constraint::Length(2),
             Constraint::Length(2),
             Constraint::Length(2),
+            Constraint::Length(2),
         ],
     )
     .header(
@@ -1243,6 +1548,7 @@ fn render_event_list(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
             Cell::from(Span::raw("F")),
             Cell::from(Span::raw("P")),
             Cell::from(Span::raw("C")),
+            Cell::from(Span::raw("W")),
         ])
         .style(
             Style::default()
@@ -1317,8 +1623,9 @@ fn render_event_details_wrapper(f: &mut ratatui::Frame<'_>, app: &App, area: Rec
     let calib_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Percentage(45),
             Constraint::Percentage(30),
+            Constraint::Percentage(22),
+            Constraint::Percentage(23),
             Constraint::Percentage(25),
         ])
         .split(body_layout[4]);
@@ -1326,6 +1633,7 @@ fn render_event_details_wrapper(f: &mut ratatui::Frame<'_>, app: &App, area: Rec
     render_debounce_config_panel(f, cal, calib_layout[0]);
     render_thresholds_panel(f, cal, calib_layout[1]);
     render_persistence_panel(f, cal, calib_layout[2]);
+    render_lamp_config_panel(f, event, calib_layout[3]);
 
     if app.editing_calib {
         let edit_line = Line::from(vec![
@@ -1381,6 +1689,11 @@ fn render_uds_status_panel(f: &mut ratatui::Frame<'_>, status: dem::UdsStatusByt
             Cell::from(Span::raw("NC This OC")),
             flag_cell(status.tnctoc()),
         ]),
+        Row::new(vec![
+            Cell::from(Span::raw("WIR")),
+            Cell::from(Span::raw("Warn Indicator")),
+            flag_cell(status.wir()),
+        ]),
     ];
 
     let table = Table::new(
@@ -1414,6 +1727,10 @@ fn render_nvm_counters_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Re
                 "{:>8}",
                 event.nv_config.confirmation_cycles
             ))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("healing_cycles").bold().fg(theme::MUTED)),
+            Cell::from(Span::raw(format!("{:>8}", event.nv_config.healing_cycles))),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("aging_cycles").bold().fg(theme::MUTED)),
@@ -1493,6 +1810,10 @@ fn render_thresholds_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, a
             Cell::from(Span::raw(format!("{:>16}", cal.confirmation_threshold))),
         ]),
         Row::new(vec![
+            Cell::from(Span::raw("healing_threshold")),
+            Cell::from(Span::raw(format!("{:>16}", cal.healing_threshold))),
+        ]),
+        Row::new(vec![
             Cell::from(Span::raw("aging_threshold")),
             Cell::from(Span::raw(format!("{:>16}", cal.aging_threshold))),
         ]),
@@ -1537,6 +1858,38 @@ fn render_persistence_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, 
             .border_style(Style::default().fg(theme::MUTED))
             .title_style(Style::default().fg(theme::PURPLE))
             .title(" Persistence "),
+    );
+
+    f.render_widget(table, area);
+}
+
+fn render_lamp_config_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Rect) {
+    let behaviors = &event.cal_config.lamp_behaviors;
+    let rows = vec![
+        Row::new(vec![
+            Cell::from(Span::raw("MIL")),
+            Cell::from(Span::raw(format!("{:?}", behaviors[0]))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("RSL")),
+            Cell::from(Span::raw(format!("{:?}", behaviors[1]))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("AWL")),
+            Cell::from(Span::raw(format!("{:?}", behaviors[2]))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("PL")),
+            Cell::from(Span::raw(format!("{:?}", behaviors[3]))),
+        ]),
+    ];
+
+    let table = Table::new(rows, [Constraint::Length(6), Constraint::Length(12)]).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(theme::MUTED))
+            .title_style(Style::default().fg(theme::PURPLE))
+            .title(" Lamp Config "),
     );
 
     f.render_widget(table, area);
@@ -2004,6 +2357,7 @@ fn main() -> Result<(), io::Error> {
     let mut app = App::new();
     app.manager.clear();
     let mut last_tick = Instant::now();
+    let mut last_handler_tick = Instant::now();
 
     let stdout = io::stdout();
     let backend = CrosstermBackend::new(stdout);
@@ -2014,6 +2368,11 @@ fn main() -> Result<(), io::Error> {
     terminal.clear()?;
 
     loop {
+        while last_handler_tick.elapsed() >= Duration::from_millis(10) {
+            app.manager.handler_10ms();
+            last_handler_tick += Duration::from_millis(10);
+        }
+
         if app.manager.state == EventManagerState::On {
             if last_tick.elapsed() >= Duration::from_secs(1) {
                 *app.manager.timestamp += 1;
@@ -2215,7 +2574,7 @@ fn handle_calib_edit_input(app: &mut App, key: KeyEvent) {
         }
 
         KeyCode::Tab => {
-            app.editing_field = (app.editing_field + 1) % 9;
+            app.editing_field = (app.editing_field + 1) % 14;
             app.last_action = format!(
                 "Editing {} for Event {}",
                 App::get_calib_field_name(app.editing_field),

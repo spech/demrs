@@ -4,7 +4,8 @@
 # - debounce_behavior: Freeze
 # - step_up/step_down: 1 (immediate)
 # - confirmation_threshold: 1
-# - aging_threshold: 10
+# - healing_threshold: 10
+# - aging_threshold: 4
 # - priority: id + 1 (priority 1-25, event id matches index)
 
 events:
@@ -16,9 +17,11 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 1
       save_trigger: OnCdtc
+      lamp_behaviors: [On, On, On, On]
 
   - id: 1
     name: "Event01"
@@ -28,7 +31,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 2
       save_trigger: OnCdtc
 
@@ -40,7 +44,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 3
       save_trigger: OnCdtc
 
@@ -52,7 +57,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 4
       save_trigger: OnCdtc
 
@@ -64,7 +70,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 5
       save_trigger: OnCdtc
 
@@ -76,7 +83,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 6
       save_trigger: OnCdtc
 
@@ -88,7 +96,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 7
       save_trigger: OnCdtc
 
@@ -100,7 +109,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 8
       save_trigger: OnCdtc
 
@@ -112,7 +122,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 9
       save_trigger: OnCdtc
 
@@ -124,7 +135,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 10
       save_trigger: OnCdtc
 
@@ -136,7 +148,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 11
       save_trigger: OnCdtc
 
@@ -148,7 +161,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 12
       save_trigger: OnCdtc
 
@@ -160,7 +174,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 13
       save_trigger: OnCdtc
 
@@ -172,7 +187,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 14
       save_trigger: OnPdtc
       record_update: false
@@ -185,7 +201,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 15
       save_trigger: OnPdtc
 
@@ -197,7 +214,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 16
       save_trigger: OnPdtc
 
@@ -209,7 +227,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 17
       save_trigger: OnPdtc
 
@@ -221,7 +240,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 18
       save_trigger: OnPdtc
 
@@ -233,7 +253,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 19
       save_trigger: OnPdtc
 
@@ -245,7 +266,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 20
       save_trigger: OnPdtc
 
@@ -257,7 +279,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 21
       save_trigger: OnPdtc
 
@@ -269,7 +292,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 22
       save_trigger: OnPdtc
 
@@ -281,7 +305,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 23
       save_trigger: OnPdtc
 
@@ -293,7 +318,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 24
       save_trigger: OnTf
       record_update: true
@@ -306,7 +332,8 @@ events:
       debounce_type: CounterBased
       debounce_behavior: Freeze
       confirmation_threshold: 1
-      aging_threshold: 10
+      healing_threshold: 10
+      aging_threshold: 4
       priority: 25
       save_trigger: OnTftoc
 

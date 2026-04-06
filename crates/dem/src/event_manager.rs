@@ -9,6 +9,7 @@ use crate::event_config::{
     CalibConfig, DebounceBehavior, DebounceType, SaveTrigger, SnapshotConfig, SNAPSHOT_DATA_SIZE,
 };
 use crate::freeze_frame::{EventId, FreezeFrame, FreezeFrameList, FreezeFrameListError};
+use crate::indicator::{IndicatorLamps, LampId};
 use crate::UdsStatusByte;
 use spin::Mutex;
 
@@ -71,6 +72,9 @@ pub struct EventManager {
     /// This is NVM data - persisted across power cycles, init, and clear.
     /// Must be incremented externally (e.g., by a chronometer).
     pub timestamp: &'static mut u32,
+    /// Reference to global indicator lamps stored in NVM.
+    /// This is NVM data - persisted across power cycles, init, and clear.
+    pub indicator_lamps: &'static mut IndicatorLamps,
 }
 
 impl EventManager {
@@ -98,12 +102,17 @@ impl EventManager {
 
             if !new_status.tftoc()
                 && !new_status.tnctoc()
-                && new_status.cdtc()
+                && !new_status.cdtc()
                 && self.events[index].nv_config.aging_cycles
                     >= self.events[index].cal_config.aging_threshold
             {
                 let event_id = index as EventId;
                 self.free_from_freeze_frames(event_id);
+            }
+
+            if !new_status.wir() && self.events[index].uds_status_old.wir() {
+                self.indicator_lamps
+                    .update_all(&self.events[index].cal_config.lamp_behaviors, false);
             }
         }
     }
@@ -115,6 +124,7 @@ impl EventManager {
         for event in self.events.iter_mut() {
             event.clear();
         }
+        self.indicator_lamps.clear_all();
         let _lock = self.freeze_frames_lock.lock();
         self.freeze_frames.clear();
     }
@@ -143,6 +153,11 @@ impl EventManager {
             .step(condition, active, sampling)
             .map_err(|_| EventManagerError::EventStepError)?;
         let new_status = event.nv_config.uds_status;
+
+        if new_status.wir() && !event.uds_status_old.wir() {
+            self.indicator_lamps
+                .update_all(&event.cal_config.lamp_behaviors, true);
+        }
 
         self.store_in_freeze_frames(index)?;
 
@@ -229,5 +244,34 @@ impl EventManager {
         if let Some(index) = index_to_remove {
             self.freeze_frames.remove(index);
         }
+    }
+
+    /// Handles the 10ms timer tick for all indicator lamps.
+    ///
+    /// Updates blink patterns for all global lamps. Should be called every 10ms.
+    pub fn handler_10ms(&mut self) {
+        self.indicator_lamps.handler_10ms_all();
+    }
+
+    /// Returns the state of the specified lamp.
+    ///
+    /// # Arguments
+    ///
+    /// * `lamp_id` - The lamp type (Mil, Rsl, Awl, Pl)
+    ///
+    /// # Returns
+    ///
+    /// `true` if the lamp is on, `false` otherwise.
+    pub fn is_lamp_on(&self, lamp_id: LampId) -> bool {
+        self.indicator_lamps.is_on(lamp_id)
+    }
+
+    /// Returns the current behavior of the specified lamp.
+    ///
+    /// # Arguments
+    ///
+    /// * `lamp_id` - The lamp type (Mil, Rsl, Awl, Pl)
+    pub fn get_lamp_behavior(&self, lamp_id: LampId) -> crate::indicator::LampBehavior {
+        self.indicator_lamps.get_behavior(lamp_id)
     }
 }

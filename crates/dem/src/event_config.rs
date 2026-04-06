@@ -2,6 +2,8 @@
 // Event Configuration
 // ─────────────────────────────────────────────
 
+use crate::indicator::LampBehavior;
+
 /// Controls the behavior of the debounce counter when the event is disabled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DebounceBehavior {
@@ -57,14 +59,18 @@ pub struct CalibConfig {
     pub debounce_type: DebounceType,
     /// Number of cycles where failure must be confirmed before setting `cdtc`.
     pub confirmation_threshold: u8,
+    /// Number of healing cycles before clearing `wir`.
+    pub healing_threshold: u8,
     /// Number of aging cycles before clearing `cdtc`.
     pub aging_threshold: u8,
     /// Priority of this event in the ordered list.
     pub priority: u8,
     /// Trigger condition for saving freeze frames.
     pub save_trigger: SaveTrigger,
-    /// allowance to update an existing freeze frame.
+    /// Allowance to update an existing freeze frame.
     pub record_update: bool,
+    /// Lamp behaviors for each lamp [Mil, Rsl, Awl, Pl].
+    pub lamp_behaviors: [LampBehavior; 4],
 }
 
 // ─────────────────────────────────────────────
