@@ -20,7 +20,7 @@
 /// |  4  | Test Not Complete Since Last Clear (tncslc) | Not-complete status since last clear                          |
 /// |  5  | Test Failed Since Last Clear (tfslc) | Failure occurred since last clear                                |
 /// |  6  | Test Not Complete This Operating Cycle (tnctoc) | Not-complete flag (`true` = event not yet confirmed)         |
-/// |  7  | (Reserved)                        | Unused bit                                                            |
+/// |  7  | Warning Indicator Requested (wir) | Warning indicator (MIL) activation flag                                |
 ///
 /// ## State Machine
 ///
@@ -44,6 +44,7 @@ impl UdsStatusByte {
     pub const TNCSLC_BIT: u8 = 1 << 4; // bit 4
     pub const TFSLC_BIT: u8 = 1 << 5; // bit 5
     pub const TNCTOC_BIT: u8 = 1 << 6; // bit 6
+    pub const WIR_BIT: u8 = 1 << 7; // bit 7
 
     pub const fn from_raw(raw: u8) -> Self {
         UdsStatusByte(raw)
@@ -159,6 +160,9 @@ impl UdsStatusByte {
 
     /// Sets the `cdtc` flag (bit 3).
     ///
+    /// When `cdtc` is set to `true`, the `wir` (Warning Indicator Requested) flag is also set.
+    /// When `cdtc` is cleared, `wir` is also cleared.
+    ///
     /// # Example
     ///
     /// ```
@@ -166,12 +170,13 @@ impl UdsStatusByte {
     /// let mut s = UdsStatusByte::from_raw(0);
     /// s.set_cdtc(true);
     /// assert!(s.cdtc());
+    /// assert!(s.wir());
     /// ```
     pub fn set_cdtc(&mut self, val: bool) {
         if val {
-            self.0 = (self.0 | Self::CDTC_BIT) & !Self::PDTC_BIT; // sets
+            self.0 = (self.0 | Self::CDTC_BIT | Self::WIR_BIT) & !Self::PDTC_BIT;
         } else {
-            self.0 &= !Self::CDTC_BIT;
+            self.0 &= !(Self::CDTC_BIT | Self::WIR_BIT);
         }
     }
 
@@ -315,6 +320,45 @@ impl UdsStatusByte {
             self.0 |= Self::TNCTOC_BIT;
         } else {
             self.0 &= !Self::TNCTOC_BIT & !Self::TNCSLC_BIT;
+        }
+    }
+
+    /// Returns the `wir` flag (bit 7) — Warning Indicator Requested.
+    ///
+    /// Set when a confirmed DTC is active, requesting activation of the MIL/warning light.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use dem::UdsStatusByte;
+    /// let mut s = UdsStatusByte::from_raw(0);
+    /// assert!(!s.wir());
+    /// s.set_cdtc(true);
+    /// assert!(s.wir());
+    /// ```
+    pub fn wir(&self) -> bool {
+        self.0 & Self::WIR_BIT != 0
+    }
+
+    /// Sets the `wir` flag (bit 7).
+    ///
+    /// Note: WIR is also automatically set/cleared by `set_cdtc()`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use dem::UdsStatusByte;
+    /// let mut s = UdsStatusByte::from_raw(0);
+    /// s.set_wir(true);
+    /// assert!(s.wir());
+    /// s.set_wir(false);
+    /// assert!(!s.wir());
+    /// ```
+    pub fn set_wir(&mut self, val: bool) {
+        if val {
+            self.0 |= Self::WIR_BIT;
+        } else {
+            self.0 &= !Self::WIR_BIT;
         }
     }
 
@@ -507,5 +551,37 @@ mod tests {
         assert!(!s.tf()); // forced false
         assert!(!s.tftoc()); // forced false
         assert!(!s.tnctoc()); // forced true
+    }
+
+    #[test]
+    fn fn_set_cdtc_sets_wir() {
+        let mut s = UdsStatusByte::from_raw(0);
+        s.init();
+        assert!(!s.wir());
+        s.set_cdtc(true);
+        assert!(s.cdtc());
+        assert!(s.wir());
+    }
+
+    #[test]
+    fn fn_set_cdtc_false_clears_wir() {
+        let mut s = UdsStatusByte::from_raw(0);
+        s.init();
+        s.set_cdtc(true);
+        assert!(s.wir());
+        s.set_cdtc(false);
+        assert!(!s.cdtc());
+        assert!(!s.wir());
+    }
+
+    #[test]
+    fn fn_set_wir() {
+        let mut s = UdsStatusByte::from_raw(0);
+        s.init();
+        assert!(!s.wir());
+        s.set_wir(true);
+        assert!(s.wir());
+        s.set_wir(false);
+        assert!(!s.wir());
     }
 }
