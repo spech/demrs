@@ -104,9 +104,9 @@ The indicator lamp module provides J1939-compliant lamp control for vehicle dash
 | Priority | Behavior | Description |
 |---------|----------|-------------|
 | Highest | `On` | Continuous illumination |
-| 2 | `ShortFlash` | 3 flashes at 4Hz, then 200ms pause |
+| 2 | `ShortFlash` | 3 flashes at 2Hz, then 1500ms pause |
 | 3 | `SlowBlink` | 1 Hz blink |
-| Lowest | `FastBlink` | 4 Hz blink |
+| Lowest | `FastBlink` | 2 Hz blink |
 
 **Features:**
 - Counter-based behavior selection (highest counter wins)

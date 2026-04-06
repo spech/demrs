@@ -11,9 +11,9 @@
 //!
 //! # Lamp Behaviors
 //! - `On` - Continuous (highest priority)
-//! - `ShortFlash` - 3 flashes at 4Hz then 200ms pause
+//! - `ShortFlash` - 3 flashes at 2Hz then 1500ms pause
 //! - `SlowBlink` - Slow flash at 1 Hz
-//! - `FastBlink` - Fast flash at 4 Hz
+//! - `FastBlink` - Fast flash at 2 Hz
 //! - `Off` - No indication (lowest priority)
 
 /// Lamp type identifiers following J1939 standard.
@@ -53,9 +53,9 @@ impl LampId {
 ///
 /// Priority (highest to lowest):
 /// - `On` (4) - Continuous
-/// - `ShortFlash` (3) - Short flashing (3 flashes at 4Hz then 200ms pause)
+/// - `ShortFlash` (3) - Short flashing (3 flashes at 2Hz then 1500ms pause)
 /// - `SlowBlink` (2) - Slow flash (1 Hz)
-/// - `FastBlink` (1) - Fast flash (4 Hz)
+/// - `FastBlink` (1) - Fast flash (2 Hz)
 /// - `Off` (0) - No indication
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LampBehavior {
@@ -92,13 +92,13 @@ mod timing {
     pub const SLOW_BLINK_CYCLE: u32 = 100;
     pub const SLOW_BLINK_ON: u32 = 50;
 
-    /// FastBlink: 4 Hz (25 ticks per cycle, 12 on / 13 off)
-    pub const FAST_BLINK_CYCLE: u32 = 25;
-    pub const FAST_BLINK_ON: u32 = 12;
+    /// FastBlink: 2 Hz (25 ticks per cycle, 25 on / 25 off)
+    pub const FAST_BLINK_CYCLE: u32 = 50;
+    pub const FAST_BLINK_ON: u32 = 25;
 
-    /// ShortFlash: 3 flashes at 4Hz (75 ticks) then 200ms pause (20 ticks)
-    pub const SHORT_FLASH_CYCLE: u32 = 56; // 36 ticks (3x12) + 20 ticks pause
-    pub const SHORT_FLASH_ON: u32 = 36; // 3 flashes x 12 ticks
+    /// ShortFlash: 3 flashes at 2Hz (150 ticks) then 150 ticks of pause
+    pub const SHORT_FLASH_CYCLE: u32 = 300; // 150 ticks (3x50) + 150 ticks pause
+    pub const SHORT_FLASH_ON: u32 = 150; // 3 flashes x 50 ticks
 }
 
 impl IndicatorLamp {
@@ -171,8 +171,8 @@ impl IndicatorLamp {
             LampBehavior::ShortFlash => {
                 let cycle_position = self.tick_counter % timing::SHORT_FLASH_CYCLE;
                 if cycle_position < timing::SHORT_FLASH_ON {
-                    let flash_position = cycle_position % 12;
-                    self.state = flash_position < 6; // 6 ON, 6 OFF per flash
+                    let flash_position = cycle_position % 50;
+                    self.state = flash_position < 25; // 25 ON, 25 OFF per flash
                 } else {
                     self.state = false; // Pause
                 }
@@ -369,13 +369,13 @@ mod tests {
         };
 
         // First 12 ticks should be on
-        for _ in 0..12 {
+        for _ in 0..25 {
             lamp.handler_10ms();
             assert!(lamp.state, "First 12 ticks should be on");
         }
 
         // Next 13 ticks should be off
-        for _ in 0..13 {
+        for _ in 0..25 {
             lamp.handler_10ms();
             assert!(!lamp.state, "Next 13 ticks should be off");
         }
@@ -394,26 +394,22 @@ mod tests {
             tick_counter: 0,
         };
 
-        // ShortFlash: 3 flashes (6 ON, 6 OFF each) then 200ms pause (20 OFF)
-        // Total cycle = 56 ticks
-        // Flash 1: ticks 0-5 ON, 6-11 OFF
-        // Flash 2: ticks 12-17 ON, 18-23 OFF
-        // Flash 3: ticks 24-29 ON, 30-35 OFF
-        // Pause: ticks 36-55 OFF (20 ticks)
+        // ShortFlash: 3 flashes (25 ON, 25 OFF each) then 1500ms pause (20 OFF)
+        // Total cycle = 300 ticks
+        // Flash 1: ticks 0-24 ON, 24-49 OFF
+        // Flash 2: ticks 50-74 ON, 75-99 OFF
+        // Flash 3: ticks 100-124 ON, 125-149 OFF
+        // Pause: ticks 150-299 OFF (20 ticks)
 
-        for tick in 0..56 {
+        for tick in 0..300 {
             lamp.handler_10ms();
             let expected_on = match tick {
-                0..=5 | 12..=17 | 24..=29 => true,
+                0..=24 | 50..=74 | 100..=124 => true,
                 _ => false,
             };
             assert_eq!(
                 lamp.state,
-                expected_on,
-                "Tick {} should be {}",
-                tick,
-                if expected_on { "on" } else { "off" }
-            );
+                expected_on);
         }
     }
 
