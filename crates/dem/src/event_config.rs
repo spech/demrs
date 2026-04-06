@@ -2,6 +2,8 @@
 // Event Configuration
 // ─────────────────────────────────────────────
 
+use crate::indicator::LampBehavior;
+
 /// Controls the behavior of the debounce counter when the event is disabled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DebounceBehavior {
@@ -65,8 +67,10 @@ pub struct CalibConfig {
     pub priority: u8,
     /// Trigger condition for saving freeze frames.
     pub save_trigger: SaveTrigger,
-    /// allowance to update an existing freeze frame.
+    /// Allowance to update an existing freeze frame.
     pub record_update: bool,
+    /// Lamp behaviors for each lamp [Mil, Rsl, Awl, Pl].
+    pub lamp_behaviors: [LampBehavior; 4],
 }
 
 // ─────────────────────────────────────────────

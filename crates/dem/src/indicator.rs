@@ -57,8 +57,9 @@ impl LampId {
 /// - `SlowBlink` (2) - Slow flash (1 Hz)
 /// - `FastBlink` (1) - Fast flash (4 Hz)
 /// - `Off` (0) - No indication
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LampBehavior {
+    #[default]
     Off = 0,
     FastBlink = 1,
     SlowBlink = 2,
@@ -73,7 +74,7 @@ impl LampBehavior {
 }
 
 /// Individual lamp state and configuration.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct IndicatorLamp {
     /// The behavior of this lamp.
     pub behavior: LampBehavior,
@@ -101,6 +102,14 @@ mod timing {
 }
 
 impl IndicatorLamp {
+    /// Clears the lamp state, resetting all counters and behavior.
+    pub fn clear(&mut self) {
+        self.counters = [0; 5];
+        self.behavior = LampBehavior::Off;
+        self.state = false;
+        self.tick_counter = 0;
+    }
+
     /// Updates the lamp state.
     ///
     /// Only updates behavior if incoming behavior has higher priority.
@@ -170,6 +179,82 @@ impl IndicatorLamp {
                 self.tick_counter = (self.tick_counter + 1) % timing::SHORT_FLASH_CYCLE;
             }
         }
+    }
+}
+
+/// Container for 4 lamps (Mil, Rsl, Awl, Pl).
+#[derive(Debug, Clone, Copy)]
+pub struct IndicatorLamps {
+    lamps: [IndicatorLamp; 4],
+}
+
+impl Default for IndicatorLamps {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl IndicatorLamps {
+    /// Creates a new IndicatorLamps with all lamps set to Off.
+    pub const fn new() -> Self {
+        Self {
+            lamps: [
+                IndicatorLamp {
+                    behavior: LampBehavior::Off,
+                    counters: [0; 5],
+                    state: false,
+                    tick_counter: 0,
+                },
+                IndicatorLamp {
+                    behavior: LampBehavior::Off,
+                    counters: [0; 5],
+                    state: false,
+                    tick_counter: 0,
+                },
+                IndicatorLamp {
+                    behavior: LampBehavior::Off,
+                    counters: [0; 5],
+                    state: false,
+                    tick_counter: 0,
+                },
+                IndicatorLamp {
+                    behavior: LampBehavior::Off,
+                    counters: [0; 5],
+                    state: false,
+                    tick_counter: 0,
+                },
+            ],
+        }
+    }
+    /// Updates all lamps based on active status and their configured behaviors.
+    ///
+    /// # Arguments
+    ///
+    /// * `behaviors` - Array of behaviors for each lamp [Mil, Rsl, Awl, Pl]
+    /// * `active` - Whether the lamp should be active
+    pub fn update_all(&mut self, behaviors: &[LampBehavior; 4], active: bool) {
+        for (i, lamp) in self.lamps.iter_mut().enumerate() {
+            lamp.update(behaviors[i], active);
+        }
+    }
+
+    /// Clears all lamp states, resetting all counters and behaviors.
+    pub fn clear_all(&mut self) {
+        for lamp in &mut self.lamps {
+            lamp.clear();
+        }
+    }
+
+    /// Calls handler_10ms on all lamps.
+    pub fn handler_10ms_all(&mut self) {
+        for lamp in &mut self.lamps {
+            lamp.handler_10ms();
+        }
+    }
+
+    /// Gets lamp state by LampId.
+    pub fn is_on(&self, lamp_id: LampId) -> bool {
+        self.lamps[lamp_id.to_index()].state
     }
 }
 
@@ -325,5 +410,109 @@ mod tests {
                 if expected_on { "on" } else { "off" }
             );
         }
+    }
+
+    #[test]
+    fn fn_indicator_lamps_is_on_returns_correct_state() {
+        let mut lamps = IndicatorLamps::default();
+        let behaviors = [
+            LampBehavior::On,
+            LampBehavior::Off,
+            LampBehavior::Off,
+            LampBehavior::Off,
+        ];
+
+        lamps.update_all(&behaviors, true);
+        lamps.handler_10ms_all();
+
+        assert!(lamps.is_on(LampId::Mil));
+        assert!(!lamps.is_on(LampId::Rsl));
+        assert!(!lamps.is_on(LampId::Awl));
+        assert!(!lamps.is_on(LampId::Pl));
+    }
+
+    #[test]
+    fn fn_indicator_lamps_update_all_updates_all_lamps() {
+        let mut lamps = IndicatorLamps::default();
+        let behaviors = [
+            LampBehavior::On,
+            LampBehavior::FastBlink,
+            LampBehavior::Off,
+            LampBehavior::SlowBlink,
+        ];
+
+        lamps.update_all(&behaviors, true);
+
+        assert_eq!(lamps.lamps[0].behavior, LampBehavior::On);
+        assert_eq!(lamps.lamps[1].behavior, LampBehavior::FastBlink);
+        assert_eq!(lamps.lamps[2].behavior, LampBehavior::Off);
+        assert_eq!(lamps.lamps[3].behavior, LampBehavior::SlowBlink);
+    }
+
+    #[test]
+    fn fn_indicator_lamps_handler_10ms_all_updates_all_lamps() {
+        let mut lamps = IndicatorLamps::default();
+        let behaviors = [
+            LampBehavior::SlowBlink,
+            LampBehavior::FastBlink,
+            LampBehavior::On,
+            LampBehavior::Off,
+        ];
+
+        lamps.update_all(&behaviors, true);
+
+        lamps.handler_10ms_all();
+
+        assert!(lamps.is_on(LampId::Mil));
+        assert!(lamps.is_on(LampId::Rsl));
+        assert!(lamps.is_on(LampId::Awl));
+        assert!(!lamps.is_on(LampId::Pl));
+    }
+
+    #[test]
+    fn fn_clear_resets_lamp_state() {
+        let mut lamp = IndicatorLamp {
+            behavior: LampBehavior::On,
+            counters: [10, 20, 30, 40, 50],
+            state: true,
+            tick_counter: 100,
+        };
+
+        lamp.clear();
+
+        assert_eq!(lamp.behavior, LampBehavior::Off);
+        assert_eq!(lamp.counters, [0; 5]);
+        assert!(!lamp.state);
+        assert_eq!(lamp.tick_counter, 0);
+    }
+
+    #[test]
+    fn fn_clear_all_resets_all_lamps() {
+        let mut lamps = IndicatorLamps::default();
+        let behaviors = [
+            LampBehavior::On,
+            LampBehavior::FastBlink,
+            LampBehavior::SlowBlink,
+            LampBehavior::ShortFlash,
+        ];
+
+        lamps.update_all(&behaviors, true);
+        lamps.handler_10ms_all();
+
+        assert!(lamps.is_on(LampId::Mil));
+        assert!(lamps.is_on(LampId::Rsl));
+        assert!(lamps.is_on(LampId::Awl));
+        assert!(lamps.is_on(LampId::Pl));
+
+        lamps.clear_all();
+
+        assert!(!lamps.is_on(LampId::Mil));
+        assert!(!lamps.is_on(LampId::Rsl));
+        assert!(!lamps.is_on(LampId::Awl));
+        assert!(!lamps.is_on(LampId::Pl));
+        assert_eq!(lamps.lamps[0].behavior, LampBehavior::Off);
+        assert_eq!(lamps.lamps[1].behavior, LampBehavior::Off);
+        assert_eq!(lamps.lamps[2].behavior, LampBehavior::Off);
+        assert_eq!(lamps.lamps[3].behavior, LampBehavior::Off);
     }
 }

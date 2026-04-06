@@ -4,6 +4,8 @@
 
 #[allow(unused_imports)]
 use crate::event_config::{CalibConfig, DebounceBehavior, DebounceType, SaveTrigger};
+#[cfg(test)]
+use crate::indicator::LampBehavior;
 use crate::UdsStatusByte;
 
 /// # Event Module
@@ -382,6 +384,12 @@ mod tests {
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
+            lamp_behaviors: [
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+            ],
         }
     }
 
@@ -441,6 +449,12 @@ mod tests {
             priority: 5,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
+            lamp_behaviors: [
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+            ],
         };
         let event = Event {
             debounce_counter: 0,
@@ -466,6 +480,12 @@ mod tests {
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
+            lamp_behaviors: [
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+            ],
         };
         let mut event = Event {
             debounce_counter: 0,
