@@ -89,7 +89,7 @@ impl EventManager {
     ///
     /// Sets the state to [`EventManagerState::Off`].
     /// Calls [`Event::stop()`] on each event to update cycle counters and disable them.
-    /// If aging threshold is reached, the corresponding freeze frame is freed.
+    /// If healing threshold is reached, the corresponding freeze frame is freed.
     pub fn stop(&mut self) {
         self.state = EventManagerState::Off;
         let len = self.events.len();
@@ -99,8 +99,8 @@ impl EventManager {
             if !new_status.tftoc()
                 && !new_status.tnctoc()
                 && new_status.cdtc()
-                && self.events[index].nv_config.aging_cycles
-                    >= self.events[index].cal_config.aging_threshold
+                && self.events[index].nv_config.healing_cycles
+                    >= self.events[index].cal_config.healing_threshold
             {
                 let event_id = index as EventId;
                 self.free_from_freeze_frames(event_id);

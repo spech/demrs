@@ -39,7 +39,7 @@ pub mod {{ fixture.module_name }} {
     pub static mut NVM_CONFIG_{{ loop.index0 }}: NvmConfig = NvmConfig {
         uds_status: UdsStatusByte::from_raw(0),
         occurence_cntr: 0,
-        aging_cycles: 0,
+        healing_cycles: 0,
         confirmation_cycles: 0,
     };
 
@@ -49,7 +49,7 @@ pub mod {{ fixture.module_name }} {
         debounce_behavior: DebounceBehavior::{{ event.calib.debounce_behavior }},
         debounce_type: DebounceType::{{ event.calib.debounce_type }},
         confirmation_threshold: {{ event.calib.confirmation_threshold }},
-        aging_threshold: {{ event.calib.aging_threshold }},
+        healing_threshold: {{ event.calib.healing_threshold }},
         priority: {{ event.calib.priority }},
         save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnTftoc' }},
         record_update: {{ 'true' if event.calib.record_update == true else 'false' }},

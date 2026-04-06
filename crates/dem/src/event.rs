@@ -69,8 +69,8 @@ pub struct NvmConfig {
     pub uds_status: UdsStatusByte,
     /// Occurrence counter: number of times `tf` transitioned from `false` to `true`.
     pub occurence_cntr: u8,
-    /// Aging cycles represents the number of consecutive cycles where a confirmed event is not failed
-    pub aging_cycles: u8,
+    /// Healing cycles represents the number of consecutive cycles where a confirmed event is not failed
+    pub healing_cycles: u8,
     /// Confirmation cycles: number of consecutive cycles where the event is confirmed failed.
     pub confirmation_cycles: u8,
 }
@@ -138,12 +138,12 @@ impl Event {
             if !self.nv_config.uds_status.tnctoc() {
                 self.nv_config.uds_status.set_pdtc(false);
                 if self.nv_config.uds_status.cdtc() {
-                    if self.nv_config.aging_cycles == self.cal_config.aging_threshold {
+                    if self.nv_config.healing_cycles == self.cal_config.healing_threshold {
                         self.nv_config.uds_status.set_cdtc(false);
                         self.nv_config.confirmation_cycles = 0u8;
                     } else {
-                        self.nv_config.aging_cycles =
-                            self.nv_config.aging_cycles.saturating_add(1u8);
+                        self.nv_config.healing_cycles =
+                            self.nv_config.healing_cycles.saturating_add(1u8);
                     }
                 }
             }
@@ -152,7 +152,7 @@ impl Event {
                 if self.nv_config.confirmation_cycles < self.cal_config.confirmation_threshold {
                     self.nv_config.confirmation_cycles =
                         self.nv_config.confirmation_cycles.saturating_add(1u8);
-                    self.nv_config.aging_cycles = 0u8;
+                    self.nv_config.healing_cycles = 0u8;
                 }
             }
         }
@@ -169,7 +169,7 @@ impl Event {
         self.uds_status_old = self.nv_config.uds_status;
         self.nv_config.occurence_cntr = 0u8;
         self.nv_config.confirmation_cycles = 0u8;
-        self.nv_config.aging_cycles = 0u8;
+        self.nv_config.healing_cycles = 0u8;
     }
 
     /// Advances the event by one step based on the input condition.
@@ -310,7 +310,7 @@ impl Event {
         self.nv_config.uds_status.set_tf(true);
         if self.nv_config.confirmation_cycles == self.cal_config.confirmation_threshold {
             self.nv_config.uds_status.set_cdtc(true);
-            self.nv_config.aging_cycles = 0u8;
+            self.nv_config.healing_cycles = 0u8;
         }
         if !self.uds_status_old.tf() {
             self.nv_config.occurence_cntr = self.nv_config.occurence_cntr.saturating_add(1u8);
@@ -360,7 +360,7 @@ mod tests {
             debounce_type,
             debounce_behavior,
             confirmation_threshold: 1,
-            aging_threshold: 1,
+            healing_threshold: 1,
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
@@ -373,7 +373,7 @@ mod tests {
         Box::leak(Box::new(NvmConfig {
             uds_status: uds,
             occurence_cntr: 0,
-            aging_cycles: 0,
+            healing_cycles: 0,
             confirmation_cycles: 0,
         }))
     }
@@ -417,7 +417,7 @@ mod tests {
             debounce_behavior: DebounceBehavior::Freeze,
             debounce_type: DebounceType::CounterBased,
             confirmation_threshold: 1,
-            aging_threshold: 1,
+            healing_threshold: 1,
             priority: 5,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
@@ -441,7 +441,7 @@ mod tests {
             debounce_behavior: DebounceBehavior::Freeze,
             debounce_type: DebounceType::CounterBased,
             confirmation_threshold: 0,
-            aging_threshold: 1,
+            healing_threshold: 1,
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
@@ -466,7 +466,7 @@ mod tests {
 
         event.nv_config.occurence_cntr = 5;
         event.nv_config.confirmation_cycles = 3;
-        event.nv_config.aging_cycles = 2;
+        event.nv_config.healing_cycles = 2;
 
         event.clear();
 
@@ -480,7 +480,7 @@ mod tests {
         assert!(event.status().tncslc());
         assert_eq!(event.nv_config.occurence_cntr, 0);
         assert_eq!(event.nv_config.confirmation_cycles, 0);
-        assert_eq!(event.nv_config.aging_cycles, 0);
+        assert_eq!(event.nv_config.healing_cycles, 0);
     }
 
     #[test]
@@ -498,7 +498,7 @@ mod tests {
     }
 
     #[test]
-    fn fn_stop_with_cdtc_and_notftoc_increment_aging_cycles() {
+    fn fn_stop_with_cdtc_and_notftoc_increment_healing_cycles() {
         let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
         event.nv_config.confirmation_cycles = 1;
         event.nv_config.uds_status.set_cdtc(true);
@@ -514,14 +514,14 @@ mod tests {
         event.stop();
 
         assert!(!event.status().pdtc());
-        assert_eq!(event.nv_config.aging_cycles, 1);
+        assert_eq!(event.nv_config.healing_cycles, 1);
     }
 
     #[test]
     fn fn_stop_with_cdtc_and_nottftoc_clear_aging_cycle_when_threshold_reached() {
         let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
         event.nv_config.confirmation_cycles = 1;
-        event.nv_config.aging_cycles = 1;
+        event.nv_config.healing_cycles = 1;
         event.nv_config.uds_status.set_cdtc(true);
         event.init();
         event.step(Status::Passed, true, 0.0).unwrap();
@@ -538,7 +538,7 @@ mod tests {
     #[test]
     fn fn_stop_with_cdtc_and_tftoc_do_not_update() {
         let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
-        event.nv_config.aging_cycles = 1;
+        event.nv_config.healing_cycles = 1;
         event.nv_config.uds_status.set_cdtc(true);
         event.init();
         event.step(Status::Failed, true, 0.0).unwrap();
@@ -549,7 +549,7 @@ mod tests {
         event.stop();
 
         assert_eq!(event.nv_config.confirmation_cycles, 0);
-        assert_eq!(event.nv_config.aging_cycles, 1);
+        assert_eq!(event.nv_config.healing_cycles, 1);
     }
 
     #[test]
@@ -564,7 +564,7 @@ mod tests {
     #[test]
     fn fn_stop_with_nottftoc_and_nottnctoc_and_notcdtc_do_not_update() {
         let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
-        event.nv_config.aging_cycles = 5;
+        event.nv_config.healing_cycles = 5;
         event.init();
         event.step(Status::Passed, true, 0.0).unwrap();
 
@@ -573,7 +573,7 @@ mod tests {
 
         event.stop();
 
-        assert_eq!(event.nv_config.aging_cycles, 5);
+        assert_eq!(event.nv_config.healing_cycles, 5);
     }
 
     #[test]

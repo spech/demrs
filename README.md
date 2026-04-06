@@ -18,7 +18,7 @@ information, including:
 
 - **DTCs (Diagnostic Trouble Codes)** - Identifiers for specific fault conditions
 - **Debouncing** - Filtering transient signals before confirming a fault
-- **Status Tracking** - Monitoring DTC lifecycle (pending, confirmed, aging)
+- **Status Tracking** - Monitoring DTC lifecycle (pending, confirmed, healing)
 
 ### Debouncing Concepts
 

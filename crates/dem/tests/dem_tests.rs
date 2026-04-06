@@ -39,7 +39,7 @@ fn bdd_freeze_frame_list_full_eviction() {
         debounce_behavior: dem::DebounceBehavior::Freeze,
         debounce_type: dem::DebounceType::CounterBased,
         confirmation_threshold: 1,
-        aging_threshold: 1,
+        healing_threshold: 1,
         priority: 10,
         save_trigger: dem::SaveTrigger::OnPdtc,
         record_update: true,
@@ -53,7 +53,7 @@ fn bdd_freeze_frame_list_full_eviction() {
         let nvm_config = Box::leak(Box::new(dem::NvmConfig {
             uds_status: uds,
             occurence_cntr: 0,
-            aging_cycles: 0,
+            healing_cycles: 0,
             confirmation_cycles: 0,
         }));
 
@@ -130,7 +130,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         debounce_behavior: dem::DebounceBehavior::Freeze,
         debounce_type: dem::DebounceType::CounterBased,
         confirmation_threshold: 1,
-        aging_threshold: 1,
+        healing_threshold: 1,
         priority: 24,
         save_trigger: dem::SaveTrigger::OnPdtc,
         record_update: true,
@@ -144,7 +144,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         let nvm_config = Box::leak(Box::new(dem::NvmConfig {
             uds_status: uds,
             occurence_cntr: 0,
-            aging_cycles: 0,
+            healing_cycles: 0,
             confirmation_cycles: 0,
         }));
 
@@ -273,25 +273,25 @@ fn bdd_freeze_frame_list_oncdtc_trigger() {
     assert!(manager.freeze_frames.get_by_event_id(0).is_some());
 }
 
-/// Tests that aged events are removed from freeze frames when aging completes.
+/// Tests that healed events are removed from freeze frames when healing completes.
 ///
-/// **Use Case**: After a confirmed DTC passes through the aging process (operating
-/// cycles where the test passes), it should be aged out and removed from storage.
+/// **Use Case**: After a confirmed DTC passes through the healing process (operating
+/// cycles where the test passes), it should be healed out and removed from storage.
 /// This prevents storage from filling with historical resolved faults and ensures
 /// only recent/relevant faults remain in the system.
 ///
-/// **Setup**: Uses fixture event 12 which has save_trigger = OnCdtc, aging_threshold = 10
+/// **Setup**: Uses fixture event 12 which has save_trigger = OnCdtc, healing_threshold = 10
 ///
 /// **Flow**:
 /// 1. First occurrence: pdtc rises, stop/init cycle sets cdtc, record created
-/// 2. Aging cycles: Test passes for 10+ operating cycles
+/// 2. Healing cycles: Test passes for 10+ operating cycles
 /// 3. After threshold: stop() clears cdtc, triggering removal from freeze frames
 ///
-/// **Aging Requirements** (all must be true in stop()):
+/// **Healing Requirements** (all must be true in stop()):
 /// - tftoc must be false (test not failed this cycle)
 /// - tnctoc must be false (test complete this cycle)
 /// - cdtc must be true (still confirmed)
-/// - aging_cycles must reach aging_threshold
+/// - healing_cycles must reach healing_threshold
 #[test]
 #[serial]
 fn bdd_freeze_frame_list_remove_aged_event() {
@@ -316,7 +316,7 @@ fn bdd_freeze_frame_list_remove_aged_event() {
     assert!(status.cdtc());
     assert!(manager.freeze_frames.get_by_event_id(12).is_some());
 
-    manager.events[12].nv_config.aging_cycles = 0;
+    manager.events[12].nv_config.healing_cycles = 0;
     manager.events[12].nv_config.uds_status = dem::UdsStatusByte::from_raw(0);
     manager.events[12].nv_config.uds_status.set_tftoc(true);
     manager.events[12].nv_config.uds_status.set_cdtc(true);

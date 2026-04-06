@@ -24,7 +24,7 @@ struct CalibFixture {
     debounce_type: String,
     debounce_behavior: String,
     confirmation_threshold: u8,
-    aging_threshold: u8,
+    healing_threshold: u8,
     priority: u8,
     save_trigger: Option<String>,
     #[serde(default)]

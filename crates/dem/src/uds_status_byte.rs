@@ -161,7 +161,7 @@ impl UdsStatusByte {
     /// Sets the `cdtc` flag (bit 3).
     ///
     /// When `cdtc` is set to `true`, the `wir` (Warning Indicator Requested) flag is also set.
-    /// When `cdtc` is cleared, `wir` is also cleared.
+    /// Note: WIR is not cleared when `cdtc` is cleared.
     ///
     /// # Example
     ///
@@ -176,7 +176,7 @@ impl UdsStatusByte {
         if val {
             self.0 = (self.0 | Self::CDTC_BIT | Self::WIR_BIT) & !Self::PDTC_BIT;
         } else {
-            self.0 &= !(Self::CDTC_BIT | Self::WIR_BIT);
+            self.0 &= !Self::CDTC_BIT;
         }
     }
 
@@ -561,17 +561,6 @@ mod tests {
         s.set_cdtc(true);
         assert!(s.cdtc());
         assert!(s.wir());
-    }
-
-    #[test]
-    fn fn_set_cdtc_false_clears_wir() {
-        let mut s = UdsStatusByte::from_raw(0);
-        s.init();
-        s.set_cdtc(true);
-        assert!(s.wir());
-        s.set_cdtc(false);
-        assert!(!s.cdtc());
-        assert!(!s.wir());
     }
 
     #[test]
