@@ -25,6 +25,7 @@ struct CalibFixture {
     debounce_behavior: String,
     confirmation_threshold: u8,
     healing_threshold: u8,
+    aging_threshold: u8,
     priority: u8,
     save_trigger: Option<String>,
     #[serde(default)]
@@ -70,8 +71,9 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("generated_config.rs");
 
-    let fixtures_dir = Path::new("tests/fixtures");
-    let templates_dir = Path::new("templates");
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    let fixtures_dir = Path::new(&manifest_dir).join("tests/fixtures");
+    let templates_dir = Path::new(&manifest_dir).join("templates");
 
     // Load snapshot config from separate YAML file
     let snapshot_config_path = fixtures_dir.join("snapshot_config.yaml");
@@ -91,34 +93,28 @@ fn main() {
 
     let mut fixtures_data = Vec::new();
 
-    if fixtures_dir.exists() {
-        if let Ok(entries) = fs::read_dir(fixtures_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
-                    if path.file_name().and_then(|s| s.to_str()) == Some("snapshot_config.yaml") {
-                        continue;
-                    }
-                    if let Ok(content) = fs::read_to_string(&path) {
-                        if let Ok(fixture) = serde_yaml::from_str::<Fixture>(&content) {
-                            let stem = path
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or("config");
-                            let module_name = sanitize_module_name(stem);
+    if let Ok(entries) = fs::read_dir(&fixtures_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
+                if path.file_name().and_then(|s| s.to_str()) == Some("snapshot_config.yaml") {
+                    continue;
+                }
+                if let Ok(content) = fs::read_to_string(&path) {
+                    if let Ok(fixture) = serde_yaml::from_str::<Fixture>(&content) {
+                        let stem = path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("config");
+                        let module_name = sanitize_module_name(stem);
 
-                            fixtures_data.push(serde_json::json!({
-                                "source_file": path.to_string_lossy(),
-                                "module_name": module_name,
-                                "events": fixture.events,
-                                "event_manager": fixture.event_manager,
-                                "snapshot_sources": snapshot_sources,
-                            }));
-                            eprintln!(
-                                "DEBUG events[0].calib.record_update = {:?}",
-                                fixture.events[0].calib.record_update
-                            );
-                        }
+                        fixtures_data.push(serde_json::json!({
+                            "source_file": path.to_string_lossy(),
+                            "module_name": module_name,
+                            "events": fixture.events,
+                            "event_manager": fixture.event_manager,
+                            "snapshot_sources": snapshot_sources,
+                        }));
                     }
                 }
             }

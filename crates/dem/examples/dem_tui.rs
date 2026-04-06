@@ -77,150 +77,175 @@ static mut EVENT_NVM: [NvmConfig; 25] = [
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
     NvmConfig {
         uds_status: UdsStatusByte::from_raw(0b0100_0000),
         occurence_cntr: 0,
         healing_cycles: 0,
+        aging_cycles: 0,
         confirmation_cycles: 0,
     },
 ];
@@ -359,6 +384,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 1,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
@@ -370,6 +396,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 2,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
@@ -381,6 +408,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 3,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: false,
@@ -392,6 +420,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 10,
+                aging_threshold: 4,
                 priority: 4,
                 save_trigger: SaveTrigger::OnTftoc,
                 record_update: true,
@@ -403,6 +432,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 5,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
@@ -414,6 +444,7 @@ impl App {
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
                 healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 6,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
@@ -425,6 +456,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 7,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
@@ -436,6 +468,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 8,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
@@ -447,6 +480,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 9,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
@@ -458,6 +492,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 4,
+                aging_threshold: 4,
                 priority: 10,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
@@ -469,6 +504,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 6,
+                aging_threshold: 4,
                 priority: 11,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
@@ -480,6 +516,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 7,
+                aging_threshold: 4,
                 priority: 12,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: false,
@@ -491,6 +528,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 13,
                 save_trigger: SaveTrigger::OnTftoc,
                 record_update: true,
@@ -502,6 +540,7 @@ impl App {
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
                 healing_threshold: 8,
+                aging_threshold: 4,
                 priority: 14,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
@@ -513,6 +552,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 4,
+                aging_threshold: 4,
                 priority: 15,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
@@ -524,6 +564,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 6,
+                aging_threshold: 4,
                 priority: 16,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
@@ -535,6 +576,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 17,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: false,
@@ -546,6 +588,7 @@ impl App {
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
                 healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 18,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
@@ -557,6 +600,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 9,
+                aging_threshold: 4,
                 priority: 19,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
@@ -568,6 +612,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 5,
+                aging_threshold: 4,
                 priority: 20,
                 save_trigger: SaveTrigger::OnTftoc,
                 record_update: true,
@@ -579,6 +624,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 4,
+                aging_threshold: 4,
                 priority: 21,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
@@ -590,6 +636,7 @@ impl App {
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
                 healing_threshold: 10,
+                aging_threshold: 4,
                 priority: 22,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
@@ -601,6 +648,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 6,
+                aging_threshold: 4,
                 priority: 23,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: false,
@@ -612,6 +660,7 @@ impl App {
                 debounce_type: DebounceType::CounterBased,
                 confirmation_threshold: 1,
                 healing_threshold: 4,
+                aging_threshold: 4,
                 priority: 24,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
@@ -623,6 +672,7 @@ impl App {
                 debounce_type: DebounceType::TimeBased,
                 confirmation_threshold: 1,
                 healing_threshold: 3,
+                aging_threshold: 4,
                 priority: 25,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
@@ -766,9 +816,10 @@ impl App {
             3 => "debounce_behavior",
             4 => "confirmation_threshold",
             5 => "healing_threshold",
-            6 => "priority",
-            7 => "save_trigger",
-            8 => "record_update",
+            6 => "aging_threshold",
+            7 => "priority",
+            8 => "save_trigger",
+            9 => "record_update",
             _ => "",
         }
     }
@@ -835,6 +886,15 @@ impl App {
             }
             6 => {
                 let new_val = if increment {
+                    event.cal_config.aging_threshold.saturating_add(1)
+                } else {
+                    event.cal_config.aging_threshold.saturating_sub(1)
+                };
+                event.cal_config.aging_threshold = new_val;
+                self.last_action = format!("aging_threshold: {}", new_val);
+            }
+            7 => {
+                let new_val = if increment {
                     event.cal_config.priority.saturating_add(1).min(255)
                 } else {
                     event.cal_config.priority.saturating_sub(1)
@@ -842,7 +902,7 @@ impl App {
                 event.cal_config.priority = new_val;
                 self.last_action = format!("priority: {}", new_val);
             }
-            7 => {
+            8 => {
                 event.cal_config.save_trigger = match event.cal_config.save_trigger {
                     SaveTrigger::OnPdtc => SaveTrigger::OnCdtc,
                     SaveTrigger::OnCdtc => SaveTrigger::OnTf,
@@ -851,7 +911,7 @@ impl App {
                 };
                 self.last_action = format!("save_trigger: {:?}", event.cal_config.save_trigger);
             }
-            8 => {
+            9 => {
                 event.cal_config.record_update = !event.cal_config.record_update;
                 self.last_action = format!("record_update: {}", event.cal_config.record_update);
             }
@@ -1424,6 +1484,10 @@ fn render_nvm_counters_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Re
             Cell::from(Span::raw("healing_cycles").bold().fg(theme::MUTED)),
             Cell::from(Span::raw(format!("{:>8}", event.nv_config.healing_cycles))),
         ]),
+        Row::new(vec![
+            Cell::from(Span::raw("aging_cycles").bold().fg(theme::MUTED)),
+            Cell::from(Span::raw(format!("{:>8}", event.nv_config.aging_cycles))),
+        ]),
     ];
 
     let table = Table::new(rows, [Constraint::Length(20), Constraint::Length(10)]).block(
@@ -1500,6 +1564,10 @@ fn render_thresholds_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, a
         Row::new(vec![
             Cell::from(Span::raw("healing_threshold")),
             Cell::from(Span::raw(format!("{:>16}", cal.healing_threshold))),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("aging_threshold")),
+            Cell::from(Span::raw(format!("{:>16}", cal.aging_threshold))),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("priority")),

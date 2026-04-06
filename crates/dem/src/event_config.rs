@@ -57,8 +57,10 @@ pub struct CalibConfig {
     pub debounce_type: DebounceType,
     /// Number of cycles where failure must be confirmed before setting `cdtc`.
     pub confirmation_threshold: u8,
-    /// Number of healing cycles before clearing `cdtc`.
+    /// Number of healing cycles before clearing `wir`.
     pub healing_threshold: u8,
+    /// Number of aging cycles before clearing `cdtc`.
+    pub aging_threshold: u8,
     /// Priority of this event in the ordered list.
     pub priority: u8,
     /// Trigger condition for saving freeze frames.

@@ -40,6 +40,7 @@ fn bdd_freeze_frame_list_full_eviction() {
         debounce_type: dem::DebounceType::CounterBased,
         confirmation_threshold: 1,
         healing_threshold: 1,
+        aging_threshold: 4,
         priority: 10,
         save_trigger: dem::SaveTrigger::OnPdtc,
         record_update: true,
@@ -54,6 +55,7 @@ fn bdd_freeze_frame_list_full_eviction() {
             uds_status: uds,
             occurence_cntr: 0,
             healing_cycles: 0,
+            aging_cycles: 0,
             confirmation_cycles: 0,
         }));
 
@@ -131,6 +133,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         debounce_type: dem::DebounceType::CounterBased,
         confirmation_threshold: 1,
         healing_threshold: 1,
+        aging_threshold: 4,
         priority: 24,
         save_trigger: dem::SaveTrigger::OnPdtc,
         record_update: true,
@@ -145,6 +148,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
             uds_status: uds,
             occurence_cntr: 0,
             healing_cycles: 0,
+            aging_cycles: 0,
             confirmation_cycles: 0,
         }));
 
@@ -318,19 +322,25 @@ fn bdd_freeze_frame_list_remove_aged_event() {
 
     manager.events[12].nv_config.healing_cycles = 0;
     manager.events[12].nv_config.uds_status = dem::UdsStatusByte::from_raw(0);
-    manager.events[12].nv_config.uds_status.set_tftoc(true);
-    manager.events[12].nv_config.uds_status.set_cdtc(true);
+    manager.events[12].nv_config.uds_status.set_cdtc(true); // set all wir
 
-    for _ in 0..11 {
-        manager.events[12].nv_config.uds_status.set_tftoc(false);
-        manager.events[12].nv_config.uds_status.set_tnctoc(false);
+    for _ in 0..manager.events[12].cal_config.healing_threshold+1 {
         manager.step(12, Status::Passed, true, 0.0).unwrap();
         manager.stop();
         manager.init();
     }
 
-    manager.events[12].nv_config.uds_status.set_tftoc(false);
-    manager.events[12].nv_config.uds_status.set_tnctoc(false);
+    assert_eq!(manager.events[12].nv_config.uds_status.wir(), false);
+    assert_eq!(manager.events[12].nv_config.uds_status.cdtc(), true);
+    assert!(manager.freeze_frames.get_by_event_id(12).is_some());
+
+    for _ in 0..manager.events[12].cal_config.aging_threshold {
+        manager.step(12, Status::Passed, true, 0.0).unwrap();
+        manager.stop();
+        manager.init();
+    }
+
+    manager.step(12, Status::Passed, true, 0.0).unwrap();
     manager.stop();
 
     assert!(manager.freeze_frames.get_by_event_id(12).is_none());
