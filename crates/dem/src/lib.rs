@@ -12,7 +12,7 @@ pub use event_config::{
 };
 pub use event_manager::{EventManager, EventManagerError, EventManagerState};
 pub use freeze_frame::{EventId, FreezeFrame, FreezeFrameList, FreezeFrameListError};
-pub use indicator::{IndicatorLamp, LampBehavior, LampId};
+pub use indicator::{IndicatorLamp, IndicatorLamps, LampBehavior, LampId};
 pub use uds_status_byte::UdsStatusByte;
 
 include!(concat!(env!("OUT_DIR"), "/generated_config.rs"));

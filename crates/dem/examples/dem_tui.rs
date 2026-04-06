@@ -65,12 +65,13 @@ mod theme {
 
 use dem::{
     CalibConfig, DebounceBehavior, DebounceType, Event, EventId, EventManager, EventManagerState,
-    FreezeFrame, FreezeFrameList, NvmConfig, SaveTrigger, SnapshotConfig, SnapshotSource, Status,
-    UdsStatusByte,
+    FreezeFrame, FreezeFrameList, IndicatorLamps, LampBehavior, NvmConfig, SaveTrigger,
+    SnapshotConfig, SnapshotSource, Status, UdsStatusByte,
 };
 use spin::Mutex;
 
 static mut FF_LIST_NVM: [Option<FreezeFrame>; 24] = [const { None }; 24];
+static mut INDICATOR_LAMPS_NVM: IndicatorLamps = IndicatorLamps::new();
 
 static mut EVENT_NVM: [NvmConfig; 25] = [
     NvmConfig {
@@ -388,6 +389,12 @@ impl App {
                 priority: 1,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 3,
@@ -400,6 +407,12 @@ impl App {
                 priority: 2,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 5,
@@ -412,6 +425,12 @@ impl App {
                 priority: 3,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: false,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 10,
@@ -424,6 +443,12 @@ impl App {
                 priority: 4,
                 save_trigger: SaveTrigger::OnTftoc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -436,6 +461,12 @@ impl App {
                 priority: 5,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 25,
@@ -448,6 +479,12 @@ impl App {
                 priority: 6,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -460,6 +497,12 @@ impl App {
                 priority: 7,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 3,
@@ -472,6 +515,12 @@ impl App {
                 priority: 8,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -484,6 +533,12 @@ impl App {
                 priority: 9,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 2,
@@ -496,6 +551,12 @@ impl App {
                 priority: 10,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 4,
@@ -508,6 +569,12 @@ impl App {
                 priority: 11,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 6,
@@ -520,6 +587,12 @@ impl App {
                 priority: 12,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: false,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -532,6 +605,12 @@ impl App {
                 priority: 13,
                 save_trigger: SaveTrigger::OnTftoc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 8,
@@ -544,6 +623,12 @@ impl App {
                 priority: 14,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 3,
@@ -556,6 +641,12 @@ impl App {
                 priority: 15,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 5,
@@ -568,6 +659,12 @@ impl App {
                 priority: 16,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 2,
@@ -580,6 +677,12 @@ impl App {
                 priority: 17,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: false,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -592,6 +695,12 @@ impl App {
                 priority: 18,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 7,
@@ -604,6 +713,12 @@ impl App {
                 priority: 19,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 4,
@@ -616,6 +731,12 @@ impl App {
                 priority: 20,
                 save_trigger: SaveTrigger::OnTftoc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -628,6 +749,12 @@ impl App {
                 priority: 21,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 9,
@@ -640,6 +767,12 @@ impl App {
                 priority: 22,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 2,
@@ -652,6 +785,12 @@ impl App {
                 priority: 23,
                 save_trigger: SaveTrigger::OnTf,
                 record_update: false,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 3,
@@ -664,6 +803,12 @@ impl App {
                 priority: 24,
                 save_trigger: SaveTrigger::OnCdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
             CalibConfig {
                 step_up: 1,
@@ -676,6 +821,12 @@ impl App {
                 priority: 25,
                 save_trigger: SaveTrigger::OnPdtc,
                 record_update: true,
+                lamp_behaviors: [
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                    LampBehavior::Off,
+                ],
             },
         ];
 
@@ -708,6 +859,7 @@ impl App {
             state: EventManagerState::Off,
             freeze_frames_lock: Mutex::new(()),
             timestamp: unsafe { &mut *addr_of_mut!(TIMESTAMP) },
+            indicator_lamps: unsafe { &mut *addr_of_mut!(INDICATOR_LAMPS_NVM) },
         };
 
         Self {

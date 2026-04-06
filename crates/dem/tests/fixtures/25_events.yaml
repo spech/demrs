@@ -21,6 +21,7 @@ events:
       aging_threshold: 4
       priority: 1
       save_trigger: OnCdtc
+      lamp_behaviors: [On, On, On, On]
 
   - id: 1
     name: "Event01"

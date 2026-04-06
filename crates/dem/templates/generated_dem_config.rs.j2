@@ -9,6 +9,7 @@ pub mod {{ fixture.module_name }} {
     use crate::event_config::{DebounceBehavior, DebounceType, SaveTrigger, SnapshotConfig, SnapshotSource};
     use crate::event_manager::{EventManager, EventManagerState};
     use crate::FreezeFrameList;
+    use crate::indicator::{IndicatorLamps, LampBehavior};
     use crate::UdsStatusByte;
 
 {% if fixture.snapshot_sources %}
@@ -55,6 +56,7 @@ pub mod {{ fixture.module_name }} {
         priority: {{ event.calib.priority }},
         save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnTftoc' }},
         record_update: {{ 'true' if event.calib.record_update == true else 'false' }},
+        lamp_behaviors: [{% if event.calib.lamp_behaviors %}{% for b in event.calib.lamp_behaviors %}LampBehavior::{{ b }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}LampBehavior::Off, LampBehavior::Off, LampBehavior::Off, LampBehavior::Off{% endif %}],
     };
 {% endfor %}
 
@@ -63,6 +65,8 @@ pub mod {{ fixture.module_name }} {
     static mut FREEZE_FRAMES: FreezeFrameList = FreezeFrameList::from_nvm(&FREEZE_FRAMES_NVM);
 
     static mut TIMESTAMP: u32 = 0;
+
+    static mut INDICATOR_LAMPS_NVM: IndicatorLamps = IndicatorLamps::new();
 
     static mut ALL_EVENTS: [Event; {{ fixture.events|length }}] = [
 {% for event in fixture.events %}
@@ -83,6 +87,7 @@ pub mod {{ fixture.module_name }} {
         state: EventManagerState::Off,
         freeze_frames_lock: spin::Mutex::new(()),
         timestamp: unsafe { &mut *(&raw mut TIMESTAMP) },
+        indicator_lamps: unsafe { &mut *core::ptr::addr_of_mut!(INDICATOR_LAMPS_NVM) },
     };
 
     pub const EVENT_COUNT: usize = {{ fixture.events|length }};

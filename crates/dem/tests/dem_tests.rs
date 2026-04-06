@@ -1,6 +1,7 @@
 use dem::{
-    f_25_events::EVENT_MANAGER, EventManager, EventManagerState, FreezeFrameList, SnapshotConfig,
-    SnapshotSource, Status,
+    f_25_events::EVENT_MANAGER, CalibConfig, DebounceBehavior, DebounceType, EventManager,
+    EventManagerState, FreezeFrameList, LampBehavior, LampId, NvmConfig, SaveTrigger,
+    SnapshotConfig, SnapshotSource, Status,
 };
 use serial_test::serial;
 
@@ -44,6 +45,12 @@ fn bdd_freeze_frame_list_full_eviction() {
         priority: 10,
         save_trigger: dem::SaveTrigger::OnPdtc,
         record_update: true,
+        lamp_behaviors: [
+            dem::LampBehavior::Off,
+            dem::LampBehavior::Off,
+            dem::LampBehavior::Off,
+            dem::LampBehavior::Off,
+        ],
     };
 
     let mut events = Vec::new();
@@ -83,6 +90,7 @@ fn bdd_freeze_frame_list_full_eviction() {
     };
 
     static mut TEST_TIMESTAMP: u32 = 0;
+    static mut INDICATOR_LAMPS_NVM: dem::IndicatorLamps = dem::IndicatorLamps::new();
 
     let mut manager = EventManager {
         events,
@@ -91,6 +99,7 @@ fn bdd_freeze_frame_list_full_eviction() {
         state: EventManagerState::Off,
         freeze_frames_lock: spin::Mutex::new(()),
         timestamp: unsafe { &mut *(&raw mut TEST_TIMESTAMP) },
+        indicator_lamps: unsafe { &mut *(&raw mut INDICATOR_LAMPS_NVM) },
     };
 
     manager.init();
@@ -126,17 +135,23 @@ fn bdd_freeze_frame_list_full_eviction() {
 #[test]
 #[serial]
 fn bdd_freeze_frame_list_full_reject_lower_priority() {
-    let cal_config_template = dem::CalibConfig {
+    let cal_config_template = CalibConfig {
         step_up: 1,
         step_down: 0,
-        debounce_behavior: dem::DebounceBehavior::Freeze,
-        debounce_type: dem::DebounceType::CounterBased,
+        debounce_behavior: DebounceBehavior::Freeze,
+        debounce_type: DebounceType::CounterBased,
         confirmation_threshold: 1,
         healing_threshold: 1,
         aging_threshold: 4,
         priority: 24,
-        save_trigger: dem::SaveTrigger::OnPdtc,
+        save_trigger: SaveTrigger::OnPdtc,
         record_update: true,
+        lamp_behaviors: [
+            LampBehavior::Off,
+            LampBehavior::Off,
+            LampBehavior::Off,
+            LampBehavior::Off,
+        ],
     };
 
     let mut events = Vec::new();
@@ -144,7 +159,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         let mut uds = dem::UdsStatusByte::from_raw(0);
         uds.set_tnctoc(true);
 
-        let nvm_config = Box::leak(Box::new(dem::NvmConfig {
+        let nvm_config = Box::leak(Box::new(NvmConfig {
             uds_status: uds,
             occurence_cntr: 0,
             healing_cycles: 0,
@@ -176,6 +191,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
     };
 
     static mut TEST_TIMESTAMP: u32 = 0;
+    static mut INDICATOR_LAMPS_NVM: dem::IndicatorLamps = dem::IndicatorLamps::new();
 
     let mut manager = EventManager {
         events,
@@ -184,6 +200,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         state: EventManagerState::Off,
         freeze_frames_lock: spin::Mutex::new(()),
         timestamp: unsafe { &mut *(&raw mut TEST_TIMESTAMP) },
+        indicator_lamps: unsafe { &mut *(&raw mut INDICATOR_LAMPS_NVM) },
     };
 
     manager.init();
@@ -267,7 +284,10 @@ fn bdd_freeze_frame_list_oncdtc_trigger() {
     *manager.timestamp = 0;
     manager.step(0, Status::Failed, true, 0.0).unwrap();
     assert!(manager.freeze_frames.get_by_event_id(0).is_none());
-
+    manager.handler_10ms();
+    for lamp_id in [LampId::Mil, LampId::Rsl, LampId::Awl, LampId::Pl] {
+        assert!(!manager.is_lamp_on(lamp_id));
+    }
     manager.stop();
     manager.init();
 
@@ -275,6 +295,10 @@ fn bdd_freeze_frame_list_oncdtc_trigger() {
     let status = manager.step(0, Status::Failed, true, 0.0).unwrap();
     assert!(status.cdtc());
     assert!(manager.freeze_frames.get_by_event_id(0).is_some());
+    manager.handler_10ms();
+    for lamp_id in [LampId::Mil, LampId::Rsl, LampId::Awl, LampId::Pl] {
+        assert!(manager.is_lamp_on(lamp_id));
+    }
 }
 
 /// Tests that healed events are removed from freeze frames when healing completes.
@@ -324,7 +348,7 @@ fn bdd_freeze_frame_list_remove_aged_event() {
     manager.events[12].nv_config.uds_status = dem::UdsStatusByte::from_raw(0);
     manager.events[12].nv_config.uds_status.set_cdtc(true); // set all wir
 
-    for _ in 0..manager.events[12].cal_config.healing_threshold+1 {
+    for _ in 0..manager.events[12].cal_config.healing_threshold + 1 {
         manager.step(12, Status::Passed, true, 0.0).unwrap();
         manager.stop();
         manager.init();

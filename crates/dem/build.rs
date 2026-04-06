@@ -30,6 +30,8 @@ struct CalibFixture {
     save_trigger: Option<String>,
     #[serde(default)]
     record_update: Option<bool>,
+    #[serde(default)]
+    lamp_behaviors: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
