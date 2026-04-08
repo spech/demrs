@@ -138,37 +138,13 @@ impl Event {
     /// Updates cycle counters based on current status and disables the event.
     pub fn stop(&mut self) -> UdsStatusByte {
         self.disabled = true;
+        self.handle_aging_cycles();
+        self.handle_healing_cycles();
+        self.handle_confirmation_cycles();
+        // Clear PDTC
         if !self.nv_config.uds_status.tftoc() {
             if !self.nv_config.uds_status.tnctoc() {
                 self.nv_config.uds_status.set_pdtc(false);
-                if self.nv_config.uds_status.wir() {
-                    if self.nv_config.healing_cycles == self.cal_config.healing_threshold {
-                        self.nv_config.uds_status.set_wir(false);
-                        self.nv_config.confirmation_cycles = 0u8;
-                    } else {
-                        self.nv_config.healing_cycles =
-                            self.nv_config.healing_cycles.saturating_add(1u8);
-                    }
-                } else {
-                    if self.nv_config.uds_status.cdtc() {
-                        if self.nv_config.aging_cycles == self.cal_config.aging_threshold {
-                            self.nv_config.uds_status.set_cdtc(false);
-                            self.nv_config.confirmation_cycles = 0u8;
-                        } else {
-                            self.nv_config.aging_cycles =
-                                self.nv_config.aging_cycles.saturating_add(1u8);
-                        }
-                    }
-                }
-            }
-        } else {
-            if !self.nv_config.uds_status.cdtc() {
-                if self.nv_config.confirmation_cycles < self.cal_config.confirmation_threshold {
-                    self.nv_config.confirmation_cycles =
-                        self.nv_config.confirmation_cycles.saturating_add(1u8);
-                    self.nv_config.healing_cycles = 0u8;
-                    self.nv_config.aging_cycles = 0u8;
-                }
             }
         }
         self.nv_config.uds_status
@@ -341,6 +317,47 @@ impl Event {
         self.nv_config.uds_status.set_tf(false);
         self.nv_config.uds_status.set_tnctoc(false);
         self.nv_config.uds_status.set_tncslc(false);
+    }
+
+    fn handle_aging_cycles(&mut self) {
+        if !self.nv_config.uds_status.wir() 
+          && self.nv_config.uds_status.cdtc() 
+          && !self.nv_config.uds_status.tftoc() 
+          && !self.nv_config.uds_status.tnctoc(){
+            if self.nv_config.aging_cycles == self.cal_config.aging_threshold {
+                self.nv_config.uds_status.set_cdtc(false);
+            } else {
+                self.nv_config.aging_cycles =
+                    self.nv_config.aging_cycles.saturating_add(1u8);
+            }
+        }
+    }
+
+    fn handle_healing_cycles(&mut self) {
+        if self.nv_config.uds_status.wir() 
+          && !self.nv_config.uds_status.tftoc() 
+          && !self.nv_config.uds_status.tnctoc() {
+            if self.nv_config.healing_cycles == self.cal_config.healing_threshold {
+                self.nv_config.uds_status.set_wir(false);
+                self.nv_config.confirmation_cycles = 0u8;
+            } else {
+                self.nv_config.healing_cycles =
+                    self.nv_config.healing_cycles.saturating_add(1u8);
+            }
+        }
+    }
+
+    fn handle_confirmation_cycles(&mut self) {
+        if self.nv_config.uds_status.tftoc() {
+            if !self.nv_config.uds_status.cdtc() {
+                if self.nv_config.confirmation_cycles < self.cal_config.confirmation_threshold {
+                    self.nv_config.confirmation_cycles =
+                        self.nv_config.confirmation_cycles.saturating_add(1u8);
+                    self.nv_config.healing_cycles = 0u8;
+                    self.nv_config.aging_cycles = 0u8;
+                }
+            }
+        }
     }
 }
 

@@ -1630,10 +1630,16 @@ fn render_event_details_wrapper(f: &mut ratatui::Frame<'_>, app: &App, area: Rec
         ])
         .split(body_layout[4]);
 
-    render_debounce_config_panel(f, cal, calib_layout[0]);
-    render_thresholds_panel(f, cal, calib_layout[1]);
-    render_persistence_panel(f, cal, calib_layout[2]);
-    render_lamp_config_panel(f, event, calib_layout[3]);
+    let editing = if app.editing_calib {
+        Some(app.editing_field)
+    } else {
+        None
+    };
+
+    render_debounce_config_panel(f, cal, calib_layout[0], editing);
+    render_thresholds_panel(f, cal, calib_layout[1], editing);
+    render_persistence_panel(f, cal, calib_layout[2], editing);
+    render_lamp_config_panel(f, event, calib_layout[3], editing);
 
     if app.editing_calib {
         let edit_line = Line::from(vec![
@@ -1766,29 +1772,33 @@ fn render_debounce_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Rect) 
     f.render_widget(table, area);
 }
 
-fn render_debounce_config_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
+fn render_debounce_config_panel(
+    f: &mut ratatui::Frame<'_>,
+    cal: &dem::CalibConfig,
+    area: Rect,
+    editing: Option<usize>,
+) {
+    let up_val = format!("{:>16}", cal.step_up);
+    let down_val = format!("{:>16}", cal.step_down);
+    let type_val = format!("{:>16}", format!("{:?}", cal.debounce_type));
+    let beh_val = format!("{:>16}", format!("{:?}", cal.debounce_behavior));
+
     let rows = vec![
         Row::new(vec![
             Cell::from(Span::raw("step_up")),
-            Cell::from(Span::raw(format!("{:>16}", cal.step_up))),
+            Cell::from(highlight_value_if_editing(0, editing, &up_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("step_down")),
-            Cell::from(Span::raw(format!("{:>16}", cal.step_down))),
+            Cell::from(highlight_value_if_editing(1, editing, &down_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("debounce_type")),
-            Cell::from(Span::raw(format!(
-                "{:>16}",
-                format!("{:?}", cal.debounce_type)
-            ))),
+            Cell::from(highlight_value_if_editing(2, editing, &type_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("debounce_behavior")),
-            Cell::from(Span::raw(format!(
-                "{:>16}",
-                format!("{:?}", cal.debounce_behavior)
-            ))),
+            Cell::from(highlight_value_if_editing(3, editing, &beh_val)),
         ]),
     ];
 
@@ -1803,23 +1813,33 @@ fn render_debounce_config_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConf
     f.render_widget(table, area);
 }
 
-fn render_thresholds_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
+fn render_thresholds_panel(
+    f: &mut ratatui::Frame<'_>,
+    cal: &dem::CalibConfig,
+    area: Rect,
+    editing: Option<usize>,
+) {
+    let conf_val = format!("{:>16}", cal.confirmation_threshold);
+    let heal_val = format!("{:>16}", cal.healing_threshold);
+    let age_val = format!("{:>16}", cal.aging_threshold);
+    let prio_val = format!("{:>16}", cal.priority);
+
     let rows = vec![
         Row::new(vec![
             Cell::from(Span::raw("confirmation_threshold")),
-            Cell::from(Span::raw(format!("{:>16}", cal.confirmation_threshold))),
+            Cell::from(highlight_value_if_editing(4, editing, &conf_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("healing_threshold")),
-            Cell::from(Span::raw(format!("{:>16}", cal.healing_threshold))),
+            Cell::from(highlight_value_if_editing(5, editing, &heal_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("aging_threshold")),
-            Cell::from(Span::raw(format!("{:>16}", cal.aging_threshold))),
+            Cell::from(highlight_value_if_editing(6, editing, &age_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("priority")),
-            Cell::from(Span::raw(format!("{:>16}", cal.priority))),
+            Cell::from(highlight_value_if_editing(7, editing, &prio_val)),
         ]),
     ];
 
@@ -1834,21 +1854,23 @@ fn render_thresholds_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, a
     f.render_widget(table, area);
 }
 
-fn render_persistence_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, area: Rect) {
+fn render_persistence_panel(
+    f: &mut ratatui::Frame<'_>,
+    cal: &dem::CalibConfig,
+    area: Rect,
+    editing: Option<usize>,
+) {
+    let save_val = format!("{:>16}", format!("{:?}", cal.save_trigger));
+    let record_val = format!("{:>16}", if cal.record_update { "Yes" } else { "No" });
+
     let rows = vec![
         Row::new(vec![
             Cell::from(Span::raw("save_trigger")),
-            Cell::from(Span::raw(format!(
-                "{:>16}",
-                format!("{:?}", cal.save_trigger)
-            ))),
+            Cell::from(highlight_value_if_editing(8, editing, &save_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("record_update")),
-            Cell::from(Span::raw(format!(
-                "{:>16}",
-                if cal.record_update { "Yes" } else { "No" }
-            ))),
+            Cell::from(highlight_value_if_editing(9, editing, &record_val)),
         ]),
     ];
 
@@ -1863,24 +1885,34 @@ fn render_persistence_panel(f: &mut ratatui::Frame<'_>, cal: &dem::CalibConfig, 
     f.render_widget(table, area);
 }
 
-fn render_lamp_config_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Rect) {
+fn render_lamp_config_panel(
+    f: &mut ratatui::Frame<'_>,
+    event: &Event,
+    area: Rect,
+    editing: Option<usize>,
+) {
     let behaviors = &event.cal_config.lamp_behaviors;
+    let mil_val = format!("{:?}", behaviors[0]);
+    let rsl_val = format!("{:?}", behaviors[1]);
+    let awl_val = format!("{:?}", behaviors[2]);
+    let pl_val = format!("{:?}", behaviors[3]);
+
     let rows = vec![
         Row::new(vec![
             Cell::from(Span::raw("MIL")),
-            Cell::from(Span::raw(format!("{:?}", behaviors[0]))),
+            Cell::from(highlight_value_if_editing(10, editing, &mil_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("RSL")),
-            Cell::from(Span::raw(format!("{:?}", behaviors[1]))),
+            Cell::from(highlight_value_if_editing(11, editing, &rsl_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("AWL")),
-            Cell::from(Span::raw(format!("{:?}", behaviors[2]))),
+            Cell::from(highlight_value_if_editing(12, editing, &awl_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("PL")),
-            Cell::from(Span::raw(format!("{:?}", behaviors[3]))),
+            Cell::from(highlight_value_if_editing(13, editing, &pl_val)),
         ]),
     ];
 
@@ -1893,6 +1925,18 @@ fn render_lamp_config_panel(f: &mut ratatui::Frame<'_>, event: &Event, area: Rec
     );
 
     f.render_widget(table, area);
+}
+
+fn highlight_value_if_editing<'a>(
+    field_index: usize,
+    editing: Option<usize>,
+    text: &'a str,
+) -> Span<'a> {
+    if editing == Some(field_index) {
+        Span::raw(text).fg(theme::YELLOW).bold()
+    } else {
+        Span::raw(text)
+    }
 }
 
 fn flag_cell(value: bool) -> Cell<'static> {

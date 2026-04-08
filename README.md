@@ -1,175 +1,83 @@
-# DEM - Diagnostic Event Manager
+# DEM TUI
 
-A Rust implementation of diagnostic event management following UDS principles,
-with support for time-based and counter-based debouncing, DTC tracking, and
-priority-ordered event processing.
+An interactive terminal UI for exploring automotive diagnostic event management, built while learning Rust and experimenting with AI-assisted development.
 
-## What is DEM?
+## Foreword
 
-**DEM** (Diagnostic Event Manager) is a core component in automotive diagnostics that
-manages the lifecycle of diagnostic events. It implements debouncing algorithms to
-filter spurious signals and tracks the status of diagnostic trouble codes (DTCs).
+I wrote this to learn Rust for embedded automotive work. Automotive diagnostics seemed like a good fit because the domain is well-defined (ISO 14229 UDS), the logic is testable, and there's real embedded C code out there for reference.
 
-### UDS Overview
+The AI angle was an experiment too. I wanted to see how well a language model could handle:
+- Scaffolding a Rust workspace with proper error handling
+- Implementing state machines correctly (these bugs are subtle)
+- Writing tests that actually verify behavior
 
-**UDS** (Unified Diagnostic Services) is a standardized protocol for automotive
-diagnostics defined in ISO 14229. It defines how ECUs report and manage diagnostic
-information, including:
+Spoiler: pretty well, but you still need to understand the domain.
 
-- **DTCs (Diagnostic Trouble Codes)** - Identifiers for specific fault conditions
-- **Debouncing** - Filtering transient signals before confirming a fault
-- **Status Tracking** - Monitoring DTC lifecycle (pending, confirmed, healing)
+## DEM TUI
 
-### Debouncing Concepts
+The TUI is the main entry point. It lets you interact with 25 diagnostic events, observe status changes, and explore freeze frame data.
 
-Debouncing prevents immediate fault confirmation when a signal fluctuates. Instead
-of confirming on a single bad reading, the system requires multiple consecutive
-readings to confirm a fault:
+### Features
 
-- **PreFailed / PrePassed** - Transitional states before confirmation
-- **Confirmation Threshold** - Number of consecutive failures needed to confirm
-- **Time-based Debouncing** - Uses elapsed time rather than tick count
-- **Counter-based Debouncing** - Uses number of samples
+- Live system state display with UDS status tracking
+- 25 configurable diagnostic events
+- Freeze frame storage with hex/physical views
+- Indicator lamp control (MIL, RSL, AWL, PL)
+- Time-based and counter-based debouncing
 
-### DTC Lifecycle
-
-```
-[Not Complete] → [PreFailed/PrePassed] → [Confirmed]
-                        ↓                      ↓
-     [Healed] ← ← ← ← [Pending] → [Aged] → [Cleared]
-```
-
-- **PDTC (Pending DTC)** - Temporary fault indicator
-- **CDTC (Confirmed DTC)** - Fully confirmed fault requiring service
-
-### Freeze Frames
-
-Freeze frames capture a snapshot of system state when a diagnostic event occurs. They provide context for debugging by storing:
-- Sensor values (voltage, RPM, speed, temperatures)
-- System conditions at the time of fault detection
-
-Freeze frames are stored persistently and survive power cycles. The DEM supports up to 24 freeze frames, prioritized by event priority.
-
-### Status Byte Flags
-
-The UDS status byte tracks DTC state across 7 bits:
-
-| Bit | Name                                      | Description                                                               |
-|-----|-------------------------------------------|---------------------------------------------------------------------------|
-| 0   | Test Failed (tf)                          | Confirmed failure (`true` = event confirmed as failed)                    |
-| 1   | Test Failed This Op. Cycle (tftoc)       | Latched failure; set with tf, never cleared                              |
-| 2   | Pending DTC (pdtc)                       | Indicates a pending diagnostic trouble code                                |
-| 3   | Confirmed DTC (cdtc)                     | Indicates a confirmed diagnostic trouble code                              |
-| 4   | Test Not Complete Since Last Clear (tncslc) | Not-complete status since last clear                                   |
-| 5   | Test Failed Since Last Clear (tfslc)     | Failure occurred since last clear                                          |
-| 6   | Test Not Complete This Op. Cycle (tnctoc) | Not-complete flag (`true` = event not yet confirmed)                    |
-| 7   | Warning Indicator Requested (wir)         | Warning indicator (MIL) activation flag                                  |
-
-## Crates
-
-This workspace contains two crates:
-
-### dem
-
-Core event management with debouncing support.
-
-Key components:
-- [`Event`] - Main event struct with configurable debouncing behavior
-- [`UdsStatusByte`] - Status bitfield for DTC tracking
-- [`Status`] - Event conditions (PreFailed, PrePassed, Failed, Passed)
-- [`EventError`] - Error types for invalid operations
-- [`CalibConfig`] - Calibration parameters (lifetime-bound references)
-- [`NvmConfig`] - Non-volatile configuration storage
-- [`FreezeFrame`] - Persistent data associated with an Event (survives power cycles)
-- [`FreezeFrameList`] - Fixed-capacity (24) list of FreezeFrame entries, priority-ordered
-- [`EventManager`] - Manages a collection of Events and their FreezeFrame data
-- [`EventManagerError`] - Error types for EventManager operations
-- [`IndicatorLamp`] - Lamp control with blink pattern management
-- [`LampBehavior`] - Lamp behavior modes (Off, FastBlink, SlowBlink, ShortFlash, On)
-- [`LampId`] - Lamp type identifiers (Mil, Rsl, Awl, Pl)
-
-### Indicator Lamps
-
-The indicator lamp module provides J1939-compliant lamp control for vehicle dashboards.
-
-**Lamp Types:**
-| Type | Description |
-|------|-------------|
-| `Mil` | Malfunction Indicator Lamp |
-| `Rsl` | Red Stop Lamp |
-| `Awl` | Amber Warning Lamp |
-| `Pl` | Protect Lamp |
-
-**Lamp Behaviors (priority order):**
-| Priority | Behavior | Description |
-|---------|----------|-------------|
-| Highest | `On` | Continuous illumination |
-| 2 | `ShortFlash` | 3 flashes at 2Hz, then 1500ms pause |
-| 3 | `SlowBlink` | 1 Hz blink |
-| Lowest | `FastBlink` | 2 Hz blink |
-
-**Features:**
-- Counter-based behavior selection (highest counter wins)
-- Automatic blink pattern generation via `handler_10ms()`
-- Tick-based timing at 10ms intervals
-
-### confirmator
-
-Condition confirmation by accumulating consecutive true steps.
-
-Key components:
-- [`Confirmator<T>`] - Generic confirmator supporting `u8`, `u16`, `u32`, `f32`
-- [`ConfirmatorError`] - Error types for invalid operations
-- [`ConfirmatorValue`] - Trait for types supporting confirmation
-
-## Installation
-
-Add the crates you need to your `Cargo.toml`:
-
-```toml
-[dependencies]
-dem = "0.1"
-confirmator = "0.1"
-```
-
-## Usage Examples
-
-### DEM TUI
-
-An interactive terminal UI for observing and interacting with the DEM library.
-
-**Run the TUI:**
+### Run It
 
 ```bash
 cargo run --example dem_tui -p dem
 ```
 
-**Features:**
-- Interactive TUI with live system state display
-- 25 configurable diagnostic events with UDS status tracking
-- Freeze frame storage with physical and raw hex views
-- Press `?` in the TUI to see all keyboard controls
+Press `?` in the TUI for keyboard controls.
+
+### Screens
+
+| Key | Screen | Description |
+|-----|--------|-------------|
+| `1` | Events List | All 25 events with status, counter, priority |
+| `2` | Event Detail | Selected event config, debounce state, NVM data |
+| `3` | Freeze Frames | Stored snapshots, sorted by priority |
+| `4` | Lamps | MIL/RSL/AWL/PL state and blink patterns |
+
+### Controls
+
+| Key | Action |
+|-----|--------|
+| `↑/↓` | Navigate |
+| `←/→` | Adjust value (in edit mode) |
+| `Space` | Toggle event pass/fail |
+| `+ / -` | Change debounce direction |
+| `1-9` | Speed multiplier for simulation |
+| `c` | Clear all events |
+| `r` | Reset selected event |
+| `e` | Edit selected event config |
+
+## Installation
+
+Requires Rust (stable). No external dependencies.
+
+```bash
+cargo build --example dem_tui -p dem
+```
 
 ## Development
 
-Run all tests across the workspace:
-
 ```bash
 cargo test --workspace
-```
-
-Run tests for a specific crate:
-
-```bash
 cargo test -p dem
 cargo test -p confirmator
 ```
 
-Run documentation tests:
+## Reference
 
-```bash
-cargo test --doc --workspace
-```
+Code is organized as a workspace:
+- `dem/` - Core event management, UDS status, freeze frames
+- `confirmator/` - Debouncing algorithms (time-based, counter-based)
+
+For UDS/DTC concepts, see the code comments and tests—they're more accurate than prose.
 
 ## License
 
