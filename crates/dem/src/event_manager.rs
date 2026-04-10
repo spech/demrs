@@ -244,6 +244,16 @@ impl EventManager {
         }
     }
 
+    /// Handles warm-up cycle aging for all events.
+    ///
+    /// Calls [`Event::handle_warmup_cycle`] on each event to process aging
+    /// during warm-up cycles.
+    pub fn handle_warmup_cycle(&mut self) {
+        for event in self.events.iter_mut() {
+            event.handle_warmup_cycle();
+        }
+    }
+
     /// Handles the 10ms timer tick for all indicator lamps.
     ///
     /// Updates blink patterns for all global lamps. Should be called every 10ms.

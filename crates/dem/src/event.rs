@@ -386,6 +386,13 @@ impl Event {
         }
     }
 
+    /// Handles aging cycles during a warm-up cycle.
+    ///
+    /// Calls [`handle_aging_cycles`] with [`AgingMode::WarmUpCycle`].
+    pub fn handle_warmup_cycle(&mut self) {
+        self.handle_aging_cycles(AgingMode::WarmUpCycle);
+    }
+
     /// Handles confirmation cycles at the end of an operating cycle.
     ///
     /// Increments `confirmation_cycles` when `tftoc` is set and `cdtc` is not yet
@@ -682,6 +689,50 @@ mod tests {
 
         assert!(event.status().cdtc());
         assert_eq!(event.nv_config.aging_cycles, 0);
+    }
+
+    #[test]
+    fn fn_handle_warmup_cycle_increments_aging_when_mode_matches() {
+        let cal = CalibConfig {
+            step_up: 0,
+            step_down: 1,
+            debounce_behavior: DebounceBehavior::Freeze,
+            debounce_type: DebounceType::CounterBased,
+            confirmation_threshold: 0,
+            healing_threshold: 0,
+            aging_threshold: 1,
+            aging_mode: AgingMode::WarmUpCycle,
+            priority: 0,
+            save_trigger: SaveTrigger::OnCdtc,
+            record_update: true,
+            lamp_behaviors: [
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+            ],
+        };
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::from_raw(0),
+            disabled: false,
+            nv_config: create_nvm_config(),
+            cal_config: cal,
+        };
+        event.init();
+        event.step(Status::Failed, true, 0.0).unwrap();
+        event.stop();
+
+        event.init();
+        event.step(Status::Passed, true, 0.0).unwrap();
+        event.stop();
+
+        assert!(!event.nv_config.uds_status.wir());
+
+        event.handle_warmup_cycle();
+
+        assert!(event.status().cdtc());
+        assert_eq!(event.nv_config.aging_cycles, 1);
     }
 
     #[test]
