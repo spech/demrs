@@ -102,9 +102,7 @@ impl EventManager {
 
             if !new_status.tftoc()
                 && !new_status.tnctoc()
-                && !new_status.cdtc()
-                && self.events[index].nv_config.aging_cycles
-                    >= self.events[index].cal_config.aging_threshold
+                && self.events[index].has_fallen(UdsStatusByte::CDTC_BIT)
             {
                 let event_id = index as EventId;
                 self.free_from_freeze_frames(event_id);
@@ -249,8 +247,17 @@ impl EventManager {
     /// Calls [`Event::handle_warmup_cycle`] on each event to process aging
     /// during warm-up cycles.
     pub fn handle_warmup_cycle(&mut self) {
-        for event in self.events.iter_mut() {
+        let len = self.events.len();
+        for index in 0..len {
+            let event = &mut self.events[index];
             event.handle_warmup_cycle();
+            if !event.nv_config.uds_status.tftoc()
+                && !event.nv_config.uds_status.tnctoc()
+                && event.has_fallen(UdsStatusByte::CDTC_BIT)
+            {
+                let event_id = index as EventId;
+                self.free_from_freeze_frames(event_id);
+            }
         }
     }
 
