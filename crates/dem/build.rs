@@ -32,6 +32,12 @@ struct CalibFixture {
     record_update: Option<bool>,
     #[serde(default)]
     lamp_behaviors: Vec<String>,
+    #[serde(default = "default_aging_mode")]
+    aging_mode: String,
+}
+
+fn default_aging_mode() -> String {
+    "OperCycle".to_string()
 }
 
 #[derive(Debug, Deserialize, Serialize)]

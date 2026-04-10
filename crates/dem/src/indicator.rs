@@ -407,9 +407,7 @@ mod tests {
                 0..=24 | 50..=74 | 100..=124 => true,
                 _ => false,
             };
-            assert_eq!(
-                lamp.state,
-                expected_on);
+            assert_eq!(lamp.state, expected_on);
         }
     }
 

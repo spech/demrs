@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────
 
 #[allow(unused_imports)]
-use crate::event_config::{CalibConfig, DebounceBehavior, DebounceType, SaveTrigger};
+use crate::event_config::{AgingMode, CalibConfig, DebounceBehavior, DebounceType, SaveTrigger};
 #[cfg(test)]
 use crate::indicator::LampBehavior;
 use crate::UdsStatusByte;
@@ -138,7 +138,7 @@ impl Event {
     /// Updates cycle counters based on current status and disables the event.
     pub fn stop(&mut self) -> UdsStatusByte {
         self.disabled = true;
-        self.handle_aging_cycles();
+        self.handle_aging_cycles(AgingMode::OperCycle);
         self.handle_healing_cycles();
         self.handle_confirmation_cycles();
         // Clear PDTC
@@ -347,7 +347,13 @@ impl Event {
     /// Increments `aging_cycles` when `cdtc` is set and the event is not failed
     /// this cycle (`!tftoc && !tnctoc`) and `wir` is not active. Clears `cdtc`
     /// when `aging_threshold` is reached.
-    fn handle_aging_cycles(&mut self) {
+    ///
+    /// The `mode` parameter specifies the current cycle type. Aging only proceeds
+    /// if `mode` matches `cal_config.aging_mode`.
+    fn handle_aging_cycles(&mut self, mode: AgingMode) {
+        if mode != self.cal_config.aging_mode {
+            return;
+        }
         if !self.nv_config.uds_status.wir()
             && self.nv_config.uds_status.cdtc()
             && !self.nv_config.uds_status.tftoc()
@@ -438,6 +444,7 @@ mod tests {
             confirmation_threshold: 1,
             healing_threshold: 1,
             aging_threshold: 4,
+            aging_mode: AgingMode::OperCycle,
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
@@ -503,6 +510,7 @@ mod tests {
             confirmation_threshold: 1,
             healing_threshold: 1,
             aging_threshold: 4,
+            aging_mode: AgingMode::OperCycle,
             priority: 5,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
@@ -534,6 +542,7 @@ mod tests {
             confirmation_threshold: 0,
             healing_threshold: 1,
             aging_threshold: 4,
+            aging_mode: AgingMode::OperCycle,
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
@@ -632,6 +641,47 @@ mod tests {
         assert!(event.status().cdtc());
         assert!(!event.status().wir());
         assert_eq!(event.nv_config.confirmation_cycles, 0);
+    }
+
+    #[test]
+    fn fn_stop_with_warmup_mode_does_not_increment_aging_cycles() {
+        let cal = CalibConfig {
+            step_up: 1,
+            step_down: 0,
+            debounce_behavior: DebounceBehavior::Freeze,
+            debounce_type: DebounceType::CounterBased,
+            confirmation_threshold: 1,
+            healing_threshold: 1,
+            aging_threshold: 4,
+            aging_mode: AgingMode::WarmUpCycle,
+            priority: 0,
+            save_trigger: SaveTrigger::OnCdtc,
+            record_update: true,
+            lamp_behaviors: [
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+            ],
+        };
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::from_raw(0),
+            disabled: false,
+            nv_config: create_nvm_config(),
+            cal_config: cal,
+        };
+        event.nv_config.uds_status.set_cdtc(true);
+        event.init();
+        event.step(Status::Passed, true, 0.0).unwrap();
+
+        assert!(event.status().cdtc());
+        assert!(!event.status().tftoc());
+
+        event.stop();
+
+        assert!(event.status().cdtc());
+        assert_eq!(event.nv_config.aging_cycles, 0);
     }
 
     #[test]

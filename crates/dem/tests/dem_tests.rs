@@ -1,6 +1,6 @@
 use dem::{
-    f_25_events::EVENT_MANAGER, CalibConfig, DebounceBehavior, DebounceType, EventManager,
-    EventManagerState, FreezeFrameList, LampBehavior, LampId, NvmConfig, SaveTrigger,
+    f_25_events::EVENT_MANAGER, AgingMode, CalibConfig, DebounceBehavior, DebounceType,
+    EventManager, EventManagerState, FreezeFrameList, LampBehavior, LampId, NvmConfig, SaveTrigger,
     SnapshotConfig, SnapshotSource, Status,
 };
 use serial_test::serial;
@@ -42,6 +42,7 @@ fn bdd_freeze_frame_list_full_eviction() {
         confirmation_threshold: 1,
         healing_threshold: 1,
         aging_threshold: 4,
+        aging_mode: AgingMode::OperCycle,
         priority: 10,
         save_trigger: dem::SaveTrigger::OnPdtc,
         record_update: true,
@@ -143,6 +144,7 @@ fn bdd_freeze_frame_list_full_reject_lower_priority() {
         confirmation_threshold: 1,
         healing_threshold: 1,
         aging_threshold: 4,
+        aging_mode: AgingMode::OperCycle,
         priority: 24,
         save_trigger: SaveTrigger::OnPdtc,
         record_update: true,

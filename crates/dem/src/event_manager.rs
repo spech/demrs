@@ -154,7 +154,7 @@ impl EventManager {
             .map_err(|_| EventManagerError::EventStepError)?;
         let new_status = event.nv_config.uds_status;
 
-        if new_status.wir() && !event.uds_status_old.wir() {
+        if event.has_risen(UdsStatusByte::WIR_BIT) {
             self.indicator_lamps
                 .update_all(&event.cal_config.lamp_behaviors, true);
         }
