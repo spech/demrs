@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────
 
 #[allow(unused_imports)]
-use crate::event_config::{CalibConfig, DebounceBehavior, DebounceType, SaveTrigger};
+use crate::event_config::{AgingMode, CalibConfig, DebounceBehavior, DebounceType, SaveTrigger};
 #[cfg(test)]
 use crate::indicator::LampBehavior;
 use crate::UdsStatusByte;
@@ -138,37 +138,13 @@ impl Event {
     /// Updates cycle counters based on current status and disables the event.
     pub fn stop(&mut self) -> UdsStatusByte {
         self.disabled = true;
+        self.handle_aging_cycles(AgingMode::OperCycle);
+        self.handle_healing_cycles();
+        self.handle_confirmation_cycles();
+        // Clear PDTC
         if !self.nv_config.uds_status.tftoc() {
             if !self.nv_config.uds_status.tnctoc() {
                 self.nv_config.uds_status.set_pdtc(false);
-                if self.nv_config.uds_status.wir() {
-                    if self.nv_config.healing_cycles == self.cal_config.healing_threshold {
-                        self.nv_config.uds_status.set_wir(false);
-                        self.nv_config.confirmation_cycles = 0u8;
-                    } else {
-                        self.nv_config.healing_cycles =
-                            self.nv_config.healing_cycles.saturating_add(1u8);
-                    }
-                } else {
-                    if self.nv_config.uds_status.cdtc() {
-                        if self.nv_config.aging_cycles == self.cal_config.aging_threshold {
-                            self.nv_config.uds_status.set_cdtc(false);
-                            self.nv_config.confirmation_cycles = 0u8;
-                        } else {
-                            self.nv_config.aging_cycles =
-                                self.nv_config.aging_cycles.saturating_add(1u8);
-                        }
-                    }
-                }
-            }
-        } else {
-            if !self.nv_config.uds_status.cdtc() {
-                if self.nv_config.confirmation_cycles < self.cal_config.confirmation_threshold {
-                    self.nv_config.confirmation_cycles =
-                        self.nv_config.confirmation_cycles.saturating_add(1u8);
-                    self.nv_config.healing_cycles = 0u8;
-                    self.nv_config.aging_cycles = 0u8;
-                }
             }
         }
         self.nv_config.uds_status
@@ -302,6 +278,20 @@ impl Event {
         Ok(self.nv_config.uds_status)
     }
 
+    /// Returns `true` if the specified bit transitioned from `0` to `1`.
+    ///
+    /// Compares the current status byte with the previous status byte.
+    pub fn has_risen(&self, bit: u8) -> bool {
+        (self.uds_status_old.raw() & bit) == 0u8 && (self.nv_config.uds_status.raw() & bit) == bit
+    }
+
+    /// Returns `true` if the specified bit transitioned from `1` to `0`.
+    ///
+    /// Compares the current status byte with the previous status byte.
+    pub fn has_fallen(&self, bit: u8) -> bool {
+        (self.uds_status_old.raw() & bit) == bit && (self.nv_config.uds_status.raw() & bit) == 0u8
+    }
+
     /// Current accumulated debounce_counter.
     pub fn debounce_counter(&self) -> i16 {
         self.debounce_counter
@@ -321,26 +311,109 @@ impl Event {
         self.debounce_counter = 0i16;
     }
 
+    /// Immediately confirms the event as failed.
+    ///
+    /// Sets `debounce_counter` to `i16::MAX`, `tf` to `true`, and increments
+    /// `occurrence_counter` on rising edge of `tf`. Resets `aging_cycles` and
+    /// conditionally resets `healing_cycles`. Sets `cdtc` if `confirmation_threshold` is reached.
     fn snap_failed(&mut self) {
         self.debounce_counter = i16::MAX;
         self.nv_config.uds_status.set_tf(true);
         self.nv_config.aging_cycles = 0u8;
-        if self.nv_config.uds_status.tnctoc() {
-            self.nv_config.healing_cycles = 0u8;
-        }
-        if self.nv_config.confirmation_cycles == self.cal_config.confirmation_threshold {
+        self.nv_config.healing_cycles = 0u8;
+        if self.nv_config.confirmation_cycles
+            >= self.cal_config.confirmation_threshold.saturating_sub(1)
+        {
             self.nv_config.uds_status.set_cdtc(true);
         }
-        if !self.uds_status_old.tf() {
+        if self.has_risen(UdsStatusByte::TF_BIT) {
             self.nv_config.occurence_cntr = self.nv_config.occurence_cntr.saturating_add(1u8);
         }
     }
 
+    /// Immediately confirms the event as passed.
+    ///
+    /// Sets `debounce_counter` to `i16::MIN`, `tf` to `false`, and clears
+    /// `tnctoc` and `tncslc` flags.
     fn snap_passed(&mut self) {
         self.debounce_counter = i16::MIN;
         self.nv_config.uds_status.set_tf(false);
         self.nv_config.uds_status.set_tnctoc(false);
         self.nv_config.uds_status.set_tncslc(false);
+    }
+
+    /// Handles aging cycles at the end of an operating cycle.
+    ///
+    /// Increments `aging_cycles` when `cdtc` is set and the event is not failed
+    /// this cycle (`!tftoc && !tnctoc`) and `wir` is not active. Clears `cdtc`
+    /// when `aging_threshold` is reached.
+    ///
+    /// The `mode` parameter specifies the current cycle type. Aging only proceeds
+    /// if `mode` matches `cal_config.aging_mode`.
+    fn handle_aging_cycles(&mut self, mode: AgingMode) {
+        if mode != self.cal_config.aging_mode {
+            return;
+        }
+        if !self.nv_config.uds_status.wir()
+            && self.nv_config.uds_status.cdtc()
+            && !self.nv_config.uds_status.tftoc()
+            && !self.nv_config.uds_status.tnctoc()
+        {
+            if self.nv_config.aging_cycles >= self.cal_config.aging_threshold.saturating_sub(1) {
+                self.nv_config.uds_status.set_cdtc(false);
+            } else {
+                self.nv_config.aging_cycles = self.nv_config.aging_cycles.saturating_add(1u8);
+            }
+        }
+    }
+
+    /// Handles healing cycles at the end of an operating cycle.
+    ///
+    /// Increments `healing_cycles` when `wir` is active and the event is not
+    /// failed this cycle (`!tftoc && !tnctoc`). Clears `wir` and resets
+    /// `confirmation_cycles` when `healing_threshold` is reached.
+    fn handle_healing_cycles(&mut self) {
+        if self.nv_config.uds_status.wir()
+            && !self.nv_config.uds_status.tftoc()
+            && !self.nv_config.uds_status.tnctoc()
+        {
+            if self.nv_config.healing_cycles >= self.cal_config.healing_threshold.saturating_sub(1)
+            {
+                self.nv_config.uds_status.set_wir(false);
+                self.nv_config.confirmation_cycles = 0u8;
+            } else {
+                self.nv_config.healing_cycles = self.nv_config.healing_cycles.saturating_add(1u8);
+            }
+        }
+    }
+
+    /// Handles aging cycles during a warm-up cycle.
+    ///
+    /// Calls [`handle_aging_cycles`] with [`AgingMode::WarmUpCycle`].
+    pub fn handle_warmup_cycle(&mut self) {
+        self.handle_aging_cycles(AgingMode::WarmUpCycle);
+    }
+
+    /// Handles confirmation cycles at the end of an operating cycle.
+    ///
+    /// Increments `confirmation_cycles` when `tftoc` is set and `cdtc` is not yet
+    /// confirmed, up to `confirmation_threshold`. Resets `healing_cycles` and
+    /// `aging_cycles` when incrementing.
+    fn handle_confirmation_cycles(&mut self) {
+        if self.nv_config.uds_status.tftoc() {
+            if !self.nv_config.uds_status.cdtc() {
+                if self.nv_config.confirmation_cycles
+                    >= self.cal_config.confirmation_threshold.saturating_sub(1)
+                {
+                    // Already at or past last increment - don't add more
+                } else {
+                    self.nv_config.confirmation_cycles =
+                        self.nv_config.confirmation_cycles.saturating_add(1u8);
+                    self.nv_config.healing_cycles = 0u8;
+                    self.nv_config.aging_cycles = 0u8;
+                }
+            }
+        }
     }
 }
 
@@ -351,10 +424,12 @@ fn div_ceil(a: i16, b: i16) -> i16 {
     ((a as i32 + b as i32 - 1) / b as i32) as i16
 }
 
+/// Converts seconds to milliseconds, with a minimum of 1ms.
 fn seconds_to_millis(seconds: f32) -> i32 {
     (seconds * 1000.0).max(1.0).round() as i32
 }
 
+/// Rounds division of two i32 values to nearest.
 fn div_round_i32(a: i32, b: i32) -> i32 {
     (a + b / 2) / b
 }
@@ -381,6 +456,7 @@ mod tests {
             confirmation_threshold: 1,
             healing_threshold: 1,
             aging_threshold: 4,
+            aging_mode: AgingMode::OperCycle,
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
@@ -446,6 +522,7 @@ mod tests {
             confirmation_threshold: 1,
             healing_threshold: 1,
             aging_threshold: 4,
+            aging_mode: AgingMode::OperCycle,
             priority: 5,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
@@ -477,6 +554,7 @@ mod tests {
             confirmation_threshold: 0,
             healing_threshold: 1,
             aging_threshold: 4,
+            aging_mode: AgingMode::OperCycle,
             priority: 0,
             save_trigger: SaveTrigger::OnCdtc,
             record_update: true,
@@ -526,7 +604,32 @@ mod tests {
 
     #[test]
     fn fn_stop_with_pdtc_increment_confirmation_counter() {
-        let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
+        let cal_config = CalibConfig {
+            step_up: 1,
+            step_down: 0,
+            debounce_behavior: DebounceBehavior::Freeze,
+            debounce_type: DebounceType::CounterBased,
+            confirmation_threshold: 2,
+            healing_threshold: 1,
+            aging_threshold: 4,
+            aging_mode: AgingMode::OperCycle,
+            priority: 0,
+            save_trigger: SaveTrigger::OnCdtc,
+            record_update: true,
+            lamp_behaviors: [
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+            ],
+        };
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::from_raw(0),
+            disabled: false,
+            nv_config: create_nvm_config(),
+            cal_config,
+        };
         event.init();
         event.step(Status::Failed, true, 0.0).unwrap();
 
@@ -555,7 +658,7 @@ mod tests {
         event.stop();
 
         assert!(!event.status().pdtc());
-        assert_eq!(event.nv_config.healing_cycles, 1);
+        assert_eq!(event.nv_config.healing_cycles, 0);
     }
 
     #[test]
@@ -578,6 +681,91 @@ mod tests {
     }
 
     #[test]
+    fn fn_stop_with_warmup_mode_does_not_increment_aging_cycles() {
+        let cal = CalibConfig {
+            step_up: 1,
+            step_down: 0,
+            debounce_behavior: DebounceBehavior::Freeze,
+            debounce_type: DebounceType::CounterBased,
+            confirmation_threshold: 1,
+            healing_threshold: 1,
+            aging_threshold: 4,
+            aging_mode: AgingMode::WarmUpCycle,
+            priority: 0,
+            save_trigger: SaveTrigger::OnCdtc,
+            record_update: true,
+            lamp_behaviors: [
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+            ],
+        };
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::from_raw(0),
+            disabled: false,
+            nv_config: create_nvm_config(),
+            cal_config: cal,
+        };
+        event.nv_config.uds_status.set_cdtc(true);
+        event.init();
+        event.step(Status::Passed, true, 0.0).unwrap();
+
+        assert!(event.status().cdtc());
+        assert!(!event.status().tftoc());
+
+        event.stop();
+
+        assert!(event.status().cdtc());
+        assert_eq!(event.nv_config.aging_cycles, 0);
+    }
+
+    #[test]
+    fn fn_handle_warmup_cycle_increments_aging_when_mode_matches() {
+        let cal = CalibConfig {
+            step_up: 0,
+            step_down: 1,
+            debounce_behavior: DebounceBehavior::Freeze,
+            debounce_type: DebounceType::CounterBased,
+            confirmation_threshold: 0,
+            healing_threshold: 0,
+            aging_threshold: 4,
+            aging_mode: AgingMode::WarmUpCycle,
+            priority: 0,
+            save_trigger: SaveTrigger::OnCdtc,
+            record_update: true,
+            lamp_behaviors: [
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+                LampBehavior::Off,
+            ],
+        };
+        let mut event = Event {
+            debounce_counter: 0,
+            uds_status_old: UdsStatusByte::from_raw(0),
+            disabled: false,
+            nv_config: create_nvm_config(),
+            cal_config: cal,
+        };
+        event.init();
+        event.step(Status::Failed, true, 0.0).unwrap();
+        event.stop();
+
+        event.init();
+        event.step(Status::Passed, true, 0.0).unwrap();
+        event.stop();
+
+        assert!(!event.nv_config.uds_status.wir());
+
+        event.handle_warmup_cycle();
+
+        assert!(event.status().cdtc());
+        assert_eq!(event.nv_config.aging_cycles, 1);
+    }
+
+    #[test]
     fn fn_stop_with_cdtc_and_tftoc_do_not_update() {
         let mut event = create_event(1, 0, DebounceType::CounterBased, DebounceBehavior::Freeze);
         event.nv_config.healing_cycles = 1;
@@ -591,7 +779,7 @@ mod tests {
         event.stop();
 
         assert_eq!(event.nv_config.confirmation_cycles, 0);
-        assert_eq!(event.nv_config.healing_cycles, 1);
+        assert_eq!(event.nv_config.healing_cycles, 0);
     }
 
     #[test]

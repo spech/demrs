@@ -174,7 +174,7 @@ impl UdsStatusByte {
     /// ```
     pub fn set_cdtc(&mut self, val: bool) {
         if val {
-            self.0 = (self.0 | Self::CDTC_BIT | Self::WIR_BIT) & !Self::PDTC_BIT;
+            self.0 = self.0 | Self::CDTC_BIT | Self::WIR_BIT;
         } else {
             self.0 &= !Self::CDTC_BIT;
         }
@@ -460,17 +460,6 @@ mod tests {
         assert!(s.cdtc());
         s.set_cdtc(false);
         assert!(!s.cdtc());
-    }
-
-    #[test]
-    fn fn_set_cdtc_resets_pdtc() {
-        let mut s = UdsStatusByte::from_raw(0);
-        s.init();
-        s.set_pdtc(true);
-        assert!(s.pdtc());
-        s.set_cdtc(true);
-        assert!(s.cdtc());
-        assert!(!s.pdtc());
     }
 
     #[test]

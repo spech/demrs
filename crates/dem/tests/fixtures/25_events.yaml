@@ -203,6 +203,7 @@ events:
       confirmation_threshold: 1
       healing_threshold: 10
       aging_threshold: 4
+      aging_mode: WarmUpCycle
       priority: 15
       save_trigger: OnPdtc
 

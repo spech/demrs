@@ -37,6 +37,15 @@ pub enum SaveTrigger {
     OnTftoc,
 }
 
+/// Specifies when aging cycles are counted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgingMode {
+    /// Aging counts at the end of an operation cycle.
+    OperCycle,
+    /// Aging counts at the end of a warm-up cycle.
+    WarmUpCycle,
+}
+
 /// Calibration configuration for [`Event`](crate::event::Event).
 ///
 /// This struct holds step counts, debounce behavior, and type,
@@ -63,6 +72,8 @@ pub struct CalibConfig {
     pub healing_threshold: u8,
     /// Number of aging cycles before clearing `cdtc`.
     pub aging_threshold: u8,
+    /// Mode for counting aging cycles.
+    pub aging_mode: AgingMode,
     /// Priority of this event in the ordered list.
     pub priority: u8,
     /// Trigger condition for saving freeze frames.

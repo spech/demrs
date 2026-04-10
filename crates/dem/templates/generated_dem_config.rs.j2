@@ -6,7 +6,7 @@
 pub mod {{ fixture.module_name }} {
     use crate::CalibConfig;
     use crate::event::{Event, NvmConfig};
-    use crate::event_config::{DebounceBehavior, DebounceType, SaveTrigger, SnapshotConfig, SnapshotSource};
+    use crate::event_config::{AgingMode, DebounceBehavior, DebounceType, SaveTrigger, SnapshotConfig, SnapshotSource};
     use crate::event_manager::{EventManager, EventManagerState};
     use crate::FreezeFrameList;
     use crate::indicator::{IndicatorLamps, LampBehavior};
@@ -53,6 +53,7 @@ pub mod {{ fixture.module_name }} {
         confirmation_threshold: {{ event.calib.confirmation_threshold }},
         healing_threshold: {{ event.calib.healing_threshold }},
         aging_threshold: {{ event.calib.aging_threshold }},
+        aging_mode: AgingMode::{{ event.calib.aging_mode }},
         priority: {{ event.calib.priority }},
         save_trigger: SaveTrigger::{{ event.calib.save_trigger if event.calib.save_trigger else 'OnTftoc' }},
         record_update: {{ 'true' if event.calib.record_update == true else 'false' }},
