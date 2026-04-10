@@ -110,7 +110,7 @@ impl EventManager {
                 self.free_from_freeze_frames(event_id);
             }
 
-            if !new_status.wir() && self.events[index].uds_status_old.wir() {
+            if self.events[index].has_fallen(UdsStatusByte::WIR_BIT) {
                 self.indicator_lamps
                     .update_all(&self.events[index].cal_config.lamp_behaviors, false);
             }
@@ -186,14 +186,12 @@ impl EventManager {
         let event = &self.events[index];
         let priority = event.cal_config.priority;
         let save_trigger = event.cal_config.save_trigger;
-        let old_status = event.uds_status_old;
-        let new_status = event.nv_config.uds_status;
 
         let rising_edge = match save_trigger {
-            SaveTrigger::OnPdtc => new_status.pdtc() && !old_status.pdtc(),
-            SaveTrigger::OnCdtc => new_status.cdtc() && !old_status.cdtc(),
-            SaveTrigger::OnTf => new_status.tf() && !old_status.tf(),
-            SaveTrigger::OnTftoc => new_status.tftoc() && !old_status.tftoc(),
+            SaveTrigger::OnPdtc => event.has_risen(UdsStatusByte::PDTC_BIT),
+            SaveTrigger::OnCdtc => event.has_risen(UdsStatusByte::CDTC_BIT),
+            SaveTrigger::OnTf => event.has_risen(UdsStatusByte::TF_BIT),
+            SaveTrigger::OnTftoc => event.has_risen(UdsStatusByte::TFTOC_BIT),
         };
 
         if rising_edge {

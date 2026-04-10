@@ -278,6 +278,20 @@ impl Event {
         Ok(self.nv_config.uds_status)
     }
 
+    /// Returns `true` if the specified bit transitioned from `0` to `1`.
+    ///
+    /// Compares the current status byte with the previous status byte.
+    pub fn has_risen(&self, bit: u8) -> bool {
+        (self.uds_status_old.raw() & bit) == 0u8 && (self.nv_config.uds_status.raw() & bit) == bit
+    }
+
+    /// Returns `true` if the specified bit transitioned from `1` to `0`.
+    ///
+    /// Compares the current status byte with the previous status byte.
+    pub fn has_fallen(&self, bit: u8) -> bool {
+        (self.uds_status_old.raw() & bit) == bit && (self.nv_config.uds_status.raw() & bit) == 0u8
+    }
+
     /// Current accumulated debounce_counter.
     pub fn debounce_counter(&self) -> i16 {
         self.debounce_counter
@@ -297,6 +311,11 @@ impl Event {
         self.debounce_counter = 0i16;
     }
 
+    /// Immediately confirms the event as failed.
+    ///
+    /// Sets `debounce_counter` to `i16::MAX`, `tf` to `true`, and increments
+    /// `occurrence_counter` on rising edge of `tf`. Resets `aging_cycles` and
+    /// conditionally resets `healing_cycles`. Sets `cdtc` if `confirmation_threshold` is reached.
     fn snap_failed(&mut self) {
         self.debounce_counter = i16::MAX;
         self.nv_config.uds_status.set_tf(true);
@@ -312,6 +331,10 @@ impl Event {
         }
     }
 
+    /// Immediately confirms the event as passed.
+    ///
+    /// Sets `debounce_counter` to `i16::MIN`, `tf` to `false`, and clears
+    /// `tnctoc` and `tncslc` flags.
     fn snap_passed(&mut self) {
         self.debounce_counter = i16::MIN;
         self.nv_config.uds_status.set_tf(false);
@@ -319,34 +342,49 @@ impl Event {
         self.nv_config.uds_status.set_tncslc(false);
     }
 
+    /// Handles aging cycles at the end of an operating cycle.
+    ///
+    /// Increments `aging_cycles` when `cdtc` is set and the event is not failed
+    /// this cycle (`!tftoc && !tnctoc`) and `wir` is not active. Clears `cdtc`
+    /// when `aging_threshold` is reached.
     fn handle_aging_cycles(&mut self) {
-        if !self.nv_config.uds_status.wir() 
-          && self.nv_config.uds_status.cdtc() 
-          && !self.nv_config.uds_status.tftoc() 
-          && !self.nv_config.uds_status.tnctoc(){
+        if !self.nv_config.uds_status.wir()
+            && self.nv_config.uds_status.cdtc()
+            && !self.nv_config.uds_status.tftoc()
+            && !self.nv_config.uds_status.tnctoc()
+        {
             if self.nv_config.aging_cycles == self.cal_config.aging_threshold {
                 self.nv_config.uds_status.set_cdtc(false);
             } else {
-                self.nv_config.aging_cycles =
-                    self.nv_config.aging_cycles.saturating_add(1u8);
+                self.nv_config.aging_cycles = self.nv_config.aging_cycles.saturating_add(1u8);
             }
         }
     }
 
+    /// Handles healing cycles at the end of an operating cycle.
+    ///
+    /// Increments `healing_cycles` when `wir` is active and the event is not
+    /// failed this cycle (`!tftoc && !tnctoc`). Clears `wir` and resets
+    /// `confirmation_cycles` when `healing_threshold` is reached.
     fn handle_healing_cycles(&mut self) {
-        if self.nv_config.uds_status.wir() 
-          && !self.nv_config.uds_status.tftoc() 
-          && !self.nv_config.uds_status.tnctoc() {
+        if self.nv_config.uds_status.wir()
+            && !self.nv_config.uds_status.tftoc()
+            && !self.nv_config.uds_status.tnctoc()
+        {
             if self.nv_config.healing_cycles == self.cal_config.healing_threshold {
                 self.nv_config.uds_status.set_wir(false);
                 self.nv_config.confirmation_cycles = 0u8;
             } else {
-                self.nv_config.healing_cycles =
-                    self.nv_config.healing_cycles.saturating_add(1u8);
+                self.nv_config.healing_cycles = self.nv_config.healing_cycles.saturating_add(1u8);
             }
         }
     }
 
+    /// Handles confirmation cycles at the end of an operating cycle.
+    ///
+    /// Increments `confirmation_cycles` when `tftoc` is set and `cdtc` is not yet
+    /// confirmed, up to `confirmation_threshold`. Resets `healing_cycles` and
+    /// `aging_cycles` when incrementing.
     fn handle_confirmation_cycles(&mut self) {
         if self.nv_config.uds_status.tftoc() {
             if !self.nv_config.uds_status.cdtc() {
@@ -368,10 +406,12 @@ fn div_ceil(a: i16, b: i16) -> i16 {
     ((a as i32 + b as i32 - 1) / b as i32) as i16
 }
 
+/// Converts seconds to milliseconds, with a minimum of 1ms.
 fn seconds_to_millis(seconds: f32) -> i32 {
     (seconds * 1000.0).max(1.0).round() as i32
 }
 
+/// Rounds division of two i32 values to nearest.
 fn div_round_i32(a: i32, b: i32) -> i32 {
     (a + b / 2) / b
 }
