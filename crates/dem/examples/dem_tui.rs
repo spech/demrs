@@ -321,22 +321,29 @@ static mut SYSTEM_STATE_OLD: SystemState = SystemState {
     fuel_pressure: 50,
 };
 
-fn update_live_system_state(tick: u32) {
+fn update_live_system_state(tick: u32, engine_running: bool) {
     unsafe {
         SYSTEM_STATE_OLD = SYSTEM_STATE;
 
         SYSTEM_STATE.battery_voltage_x10 = 118_u8.saturating_add(((tick % 10) * 7 % 10) as u8);
 
-        let base_rpm = 800 + (tick % 600);
-        let variation = (((tick % 200) * 37 % 200) as i16) - 100;
-        SYSTEM_STATE.engine_rpm = (base_rpm as i16 + variation) as u16;
+        if engine_running {
+            let base_rpm = 800 + (tick % 600);
+            let variation = (((tick % 200) * 37 % 200) as i16) - 100;
+            SYSTEM_STATE.engine_rpm = (base_rpm as i16 + variation) as u16;
+            SYSTEM_STATE.vehicle_speed = ((tick % 180) * 13 % 180) as u16;
+            SYSTEM_STATE.coolant_temp = SYSTEM_STATE.coolant_temp.saturating_add(2).min(150);
+            SYSTEM_STATE.intake_air_temp = 20_u8.saturating_add(((tick % 25) * 5 % 25) as u8);
+            SYSTEM_STATE.throttle_position = ((tick % 100) * 17 % 100) as u8;
+        } else {
+            SYSTEM_STATE.engine_rpm = 0;
+            SYSTEM_STATE.vehicle_speed = 0;
+            SYSTEM_STATE.coolant_temp = SYSTEM_STATE.coolant_temp.saturating_sub(2).max(20);
+            SYSTEM_STATE.intake_air_temp = 20;
+            SYSTEM_STATE.throttle_position = 0;
+        }
 
-        SYSTEM_STATE.vehicle_speed = ((tick % 180) * 13 % 180) as u16;
-        SYSTEM_STATE.coolant_temp = 75_u8.saturating_add(((tick % 35) * 3 % 35) as u8);
-        SYSTEM_STATE.intake_air_temp = 20_u8.saturating_add(((tick % 25) * 5 % 25) as u8);
-        SYSTEM_STATE.throttle_position = ((tick % 100) * 17 % 100) as u8;
         SYSTEM_STATE.obd_cycle_counter = (tick / 60) as u16;
-
         SYSTEM_STATE.fuel_level = 75_u8.saturating_sub(((tick % 15) * 2 % 30) as u8);
         SYSTEM_STATE.oil_pressure = 45_u16.saturating_add(((tick % 20) * 7 % 140) as u16);
         SYSTEM_STATE.transmission_temp = 70_u8.saturating_add(((tick % 10) * 5 % 40) as u8);
@@ -371,6 +378,9 @@ struct App {
     scroll: usize,
     show_help: bool,
     current_cycle: u32,
+    engine_running: bool,
+    warmup_start_temp: u8,
+    warmup_triggered: bool,
 }
 
 impl App {
@@ -901,6 +911,9 @@ impl App {
             scroll: 0,
             show_help: false,
             current_cycle: 0,
+            engine_running: false,
+            warmup_start_temp: 20,
+            warmup_triggered: false,
         }
     }
 
@@ -994,13 +1007,14 @@ impl App {
             4 => "confirmation_threshold",
             5 => "healing_threshold",
             6 => "aging_threshold",
-            7 => "priority",
-            8 => "save_trigger",
-            9 => "record_update",
-            10 => "Lamp MIL",
-            11 => "Lamp RSL",
-            12 => "Lamp AWL",
-            13 => "Lamp PL",
+            7 => "aging_mode",
+            8 => "priority",
+            9 => "save_trigger",
+            10 => "record_update",
+            11 => "Lamp MIL",
+            12 => "Lamp RSL",
+            13 => "Lamp AWL",
+            14 => "Lamp PL",
             _ => "",
         }
     }
@@ -1085,6 +1099,13 @@ impl App {
                 self.last_action = format!("aging_threshold: {}", new_val);
             }
             7 => {
+                event.cal_config.aging_mode = match event.cal_config.aging_mode {
+                    AgingMode::OperCycle => AgingMode::WarmUpCycle,
+                    AgingMode::WarmUpCycle => AgingMode::OperCycle,
+                };
+                self.last_action = format!("aging_mode: {:?}", event.cal_config.aging_mode);
+            }
+            8 => {
                 let new_val = if increment {
                     event.cal_config.priority.saturating_add(1).min(255)
                 } else {
@@ -1093,7 +1114,7 @@ impl App {
                 event.cal_config.priority = new_val;
                 self.last_action = format!("priority: {}", new_val);
             }
-            8 => {
+            9 => {
                 event.cal_config.save_trigger = match event.cal_config.save_trigger {
                     SaveTrigger::OnPdtc => SaveTrigger::OnCdtc,
                     SaveTrigger::OnCdtc => SaveTrigger::OnTf,
@@ -1102,26 +1123,26 @@ impl App {
                 };
                 self.last_action = format!("save_trigger: {:?}", event.cal_config.save_trigger);
             }
-            9 => {
+            10 => {
                 event.cal_config.record_update = !event.cal_config.record_update;
                 self.last_action = format!("record_update: {}", event.cal_config.record_update);
             }
-            10 => {
+            11 => {
                 event.cal_config.lamp_behaviors[0] =
                     Self::next_lamp_behavior(event.cal_config.lamp_behaviors[0]);
                 self.last_action = format!("Lamp MIL: {:?}", event.cal_config.lamp_behaviors[0]);
             }
-            11 => {
+            12 => {
                 event.cal_config.lamp_behaviors[1] =
                     Self::next_lamp_behavior(event.cal_config.lamp_behaviors[1]);
                 self.last_action = format!("Lamp RSL: {:?}", event.cal_config.lamp_behaviors[1]);
             }
-            12 => {
+            13 => {
                 event.cal_config.lamp_behaviors[2] =
                     Self::next_lamp_behavior(event.cal_config.lamp_behaviors[2]);
                 self.last_action = format!("Lamp AWL: {:?}", event.cal_config.lamp_behaviors[2]);
             }
-            13 => {
+            14 => {
                 event.cal_config.lamp_behaviors[3] =
                     Self::next_lamp_behavior(event.cal_config.lamp_behaviors[3]);
                 self.last_action = format!("Lamp PL: {:?}", event.cal_config.lamp_behaviors[3]);
@@ -1139,13 +1160,15 @@ impl App {
             3 => format!("{:?}", event.cal_config.debounce_behavior),
             4 => format!("{}", event.cal_config.confirmation_threshold),
             5 => format!("{}", event.cal_config.healing_threshold),
-            6 => format!("{}", event.cal_config.priority),
-            7 => format!("{:?}", event.cal_config.save_trigger),
-            8 => format!("{}", event.cal_config.record_update),
-            10 => format!("{:?}", event.cal_config.lamp_behaviors[0]),
-            11 => format!("{:?}", event.cal_config.lamp_behaviors[1]),
-            12 => format!("{:?}", event.cal_config.lamp_behaviors[2]),
-            13 => format!("{:?}", event.cal_config.lamp_behaviors[3]),
+            6 => format!("{}", event.cal_config.aging_threshold),
+            7 => format!("{:?}", event.cal_config.aging_mode),
+            8 => format!("{}", event.cal_config.priority),
+            9 => format!("{:?}", event.cal_config.save_trigger),
+            10 => format!("{}", event.cal_config.record_update),
+            11 => format!("{:?}", event.cal_config.lamp_behaviors[0]),
+            12 => format!("{:?}", event.cal_config.lamp_behaviors[1]),
+            13 => format!("{:?}", event.cal_config.lamp_behaviors[2]),
+            14 => format!("{:?}", event.cal_config.lamp_behaviors[3]),
             _ => String::new(),
         }
     }
@@ -1238,7 +1261,7 @@ fn render_body(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
     }
 }
 
-fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) {
+fn render_live_system_state(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
     let state = unsafe { &*(&raw const SYSTEM_STATE) };
     let old_state = unsafe { &*(&raw const SYSTEM_STATE_OLD) };
 
@@ -1267,7 +1290,7 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             Cell::from(Span::raw(format!("{:>2}", trend)).fg(trend_color))
         };
     let make_value_cell = |text: String| -> Cell<'static> {
-        Cell::from(Line::from(Span::raw(format!("{:>10}", text))))
+        Cell::from(Line::from(Span::raw(format!("{:>12}", text))))
     };
 
     let rows: Vec<Row> = vec![
@@ -1394,12 +1417,37 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
             Cell::from(Span::raw("  ")),
         ]),
         Row::new(vec![
-            Cell::from(Span::raw("System Mode")),
-            Cell::from(match state.system_mode {
-                0x01 => Span::raw("   Normal").fg(theme::GREEN),
-                0x02 => Span::raw("Fault Active").fg(theme::RED),
-                0x03 => Span::raw("Fault Healed").fg(theme::YELLOW),
-                _ => Span::raw("   Unknown").fg(theme::MUTED),
+            Cell::from(Span::raw("DEM State")),
+            Cell::from({
+                let dem_state = match app.manager.state {
+                    EventManagerState::On => Span::raw(format!("{:>12}", "ON")).fg(theme::GREEN),
+                    EventManagerState::Off => Span::raw(format!("{:>12}", "OFF")).fg(theme::RED),
+                };
+                dem_state
+            }),
+            Cell::from(Span::raw("  ")),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("Engine")),
+            Cell::from({
+                let engine_state = if app.engine_running {
+                    Span::raw(format!("{:>12}", "RUNNING")).fg(theme::GREEN)
+                } else {
+                    Span::raw(format!("{:>12}", "STOPPED")).fg(theme::RED)
+                };
+                engine_state
+            }),
+            Cell::from(Span::raw("  ")),
+        ]),
+        Row::new(vec![
+            Cell::from(Span::raw("Warm-up")),
+            Cell::from({
+                let warmup_state = if app.warmup_triggered {
+                    Span::raw(format!("{:>12}", "COMPLETE")).fg(theme::GREEN)
+                } else {
+                    Span::raw(format!("{:>12}", "PENDING")).fg(theme::RED)
+                };
+                warmup_state
             }),
             Cell::from(Span::raw("  ")),
         ]),
@@ -1409,14 +1457,14 @@ fn render_live_system_state(f: &mut ratatui::Frame<'_>, _app: &App, area: Rect) 
         rows,
         [
             Constraint::Length(20),
-            Constraint::Length(10),
+            Constraint::Length(12),
             Constraint::Length(3),
         ],
     )
     .header(
         Row::new(vec![
             Cell::from(Span::raw("Parameter")),
-            Cell::from(Line::from(Span::raw(format!("{:>10}", "Value")))),
+            Cell::from(Line::from(Span::raw(format!("{:>12}", "Value")))),
             Cell::from(Span::raw("")),
         ])
         .style(
@@ -1847,6 +1895,7 @@ fn render_thresholds_panel(
     let conf_val = format!("{:>16}", cal.confirmation_threshold);
     let heal_val = format!("{:>16}", cal.healing_threshold);
     let age_val = format!("{:>16}", cal.aging_threshold);
+    let age_mode_val = format!("{:>16}", format!("{:?}", cal.aging_mode));
     let prio_val = format!("{:>16}", cal.priority);
 
     let rows = vec![
@@ -1863,8 +1912,12 @@ fn render_thresholds_panel(
             Cell::from(highlight_value_if_editing(6, editing, &age_val)),
         ]),
         Row::new(vec![
+            Cell::from(Span::raw("aging_mode")),
+            Cell::from(highlight_value_if_editing(7, editing, &age_mode_val)),
+        ]),
+        Row::new(vec![
             Cell::from(Span::raw("priority")),
-            Cell::from(highlight_value_if_editing(7, editing, &prio_val)),
+            Cell::from(highlight_value_if_editing(8, editing, &prio_val)),
         ]),
     ];
 
@@ -1891,11 +1944,11 @@ fn render_persistence_panel(
     let rows = vec![
         Row::new(vec![
             Cell::from(Span::raw("save_trigger")),
-            Cell::from(highlight_value_if_editing(8, editing, &save_val)),
+            Cell::from(highlight_value_if_editing(9, editing, &save_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("record_update")),
-            Cell::from(highlight_value_if_editing(9, editing, &record_val)),
+            Cell::from(highlight_value_if_editing(10, editing, &record_val)),
         ]),
     ];
 
@@ -1925,19 +1978,19 @@ fn render_lamp_config_panel(
     let rows = vec![
         Row::new(vec![
             Cell::from(Span::raw("MIL")),
-            Cell::from(highlight_value_if_editing(10, editing, &mil_val)),
+            Cell::from(highlight_value_if_editing(11, editing, &mil_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("RSL")),
-            Cell::from(highlight_value_if_editing(11, editing, &rsl_val)),
+            Cell::from(highlight_value_if_editing(12, editing, &rsl_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("AWL")),
-            Cell::from(highlight_value_if_editing(12, editing, &awl_val)),
+            Cell::from(highlight_value_if_editing(13, editing, &awl_val)),
         ]),
         Row::new(vec![
             Cell::from(Span::raw("PL")),
-            Cell::from(highlight_value_if_editing(13, editing, &pl_val)),
+            Cell::from(highlight_value_if_editing(14, editing, &pl_val)),
         ]),
     ];
 
@@ -2224,7 +2277,7 @@ fn render_footer(f: &mut ratatui::Frame<'_>, app: &App, area: Rect) {
             Span::raw("| Last: ").fg(theme::MUTED),
             Span::raw(&app.last_action),
             Span::raw(" | ").fg(theme::MUTED),
-            Span::raw("[Space] Select  [1] PreFail  [2] Fail  [3] PrePass  [4] Pass  [E] Edit  [I] Init  [S] Stop  [N] Cycle  [C] Clear  [F] FF  [?] Help  [Q] Quit"),
+            Span::raw("[Space] Select  [1] PreFail  [2] Fail  [3] PrePass  [4] Pass  [E] Edit  [I] Init  [S] Stop  [N] Cycle  [O] Engine  [C] Clear  [F] FF  [?] Help  [Q] Quit"),
         ])
     };
 
@@ -2340,6 +2393,10 @@ fn render_help_overlay(f: &mut ratatui::Frame<'_>, app: &App) {
             Span::raw("  [N]            ").fg(theme::YELLOW),
             Span::raw("Next cycle (stop + init)"),
         ]),
+        Line::from(vec![
+            Span::raw("  [O]            ").fg(theme::YELLOW),
+            Span::raw("Engine Start/Stop"),
+        ]),
         Line::from(""),
         Line::from(vec![Span::raw("Data Management")
             .bold()
@@ -2447,7 +2504,15 @@ fn main() -> Result<(), io::Error> {
                 *app.manager.timestamp += 1;
                 unsafe {
                     SIMULATION_TICK += 1;
-                    update_live_system_state(SIMULATION_TICK);
+                    update_live_system_state(SIMULATION_TICK, app.engine_running);
+                    let state = &*(&raw const SYSTEM_STATE);
+                    if app.engine_running && !app.warmup_triggered {
+                        let raise = state.coolant_temp.saturating_sub(app.warmup_start_temp);
+                        if raise >= 20 && state.coolant_temp >= 70 {
+                            app.manager.handle_warmup_cycle();
+                            app.warmup_triggered = true;
+                        }
+                    }
                 }
                 last_tick = Instant::now();
             }
@@ -2540,6 +2605,18 @@ fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
 
         KeyCode::Char('n') | KeyCode::Char('N') => {
             app.next_cycle();
+        }
+
+        KeyCode::Char('o') | KeyCode::Char('O') => {
+            app.engine_running = !app.engine_running;
+            if app.engine_running {
+                let state = unsafe { &*(&raw const SYSTEM_STATE) };
+                app.warmup_start_temp = state.coolant_temp;
+                app.warmup_triggered = false;
+                app.last_action = "Engine started".to_string();
+            } else {
+                app.last_action = "Engine stopped".to_string();
+            }
         }
 
         KeyCode::Char('c') | KeyCode::Char('C') => {
@@ -2643,7 +2720,7 @@ fn handle_calib_edit_input(app: &mut App, key: KeyEvent) {
         }
 
         KeyCode::Tab => {
-            app.editing_field = (app.editing_field + 1) % 14;
+            app.editing_field = (app.editing_field + 1) % 15;
             app.last_action = format!(
                 "Editing {} for Event {}",
                 App::get_calib_field_name(app.editing_field),
